@@ -11,6 +11,8 @@ app.use((req, res, next) => {
   const allowed = origin === 'http://localhost:5173' || /\.vercel\.app$/.test(origin)
   if (allowed) res.setHeader('Access-Control-Allow-Origin', origin)
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  if (req.method === 'OPTIONS') return res.sendStatus(204)
   next()
 })
 app.use(express.json())
