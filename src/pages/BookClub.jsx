@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Users, BookOpen, ArrowLeft, Copy, Check } from 'lucide-react'
 import { c } from '../lib/theme'
 
-const API = 'http://localhost:3001'
+const API = ''
 
 // ── Create club form ──────────────────────────────────────────────────────────
 

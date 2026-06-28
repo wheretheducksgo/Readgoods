@@ -7,7 +7,9 @@ const app = express()
 const PORT = 3001
 
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173')
+  const origin = req.headers.origin || ''
+  const allowed = origin === 'http://localhost:5173' || /\.vercel\.app$/.test(origin)
+  if (allowed) res.setHeader('Access-Control-Allow-Origin', origin)
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   next()
 })
@@ -32,6 +34,8 @@ function cacheGet(key) {
 function cacheSet(key, data) {
   cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL })
 }
+
+app.get('/api/health', (_, res) => res.json({ ok: true }))
 
 // GET /api/reviews?title=...&author=...
 app.get('/api/reviews', async (req, res) => {

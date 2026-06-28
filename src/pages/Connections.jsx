@@ -4,7 +4,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react'
 import { getVolume, searchBooks } from '../lib/googleBooks'
 import { c } from '../lib/theme'
 
-const PROXY = 'http://localhost:3001'
+const PROXY = ''
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
