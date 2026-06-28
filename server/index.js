@@ -4,7 +4,7 @@ import axios from 'axios'
 import Anthropic from '@anthropic-ai/sdk'
 
 const app = express()
-const PORT = 3001
+const PORT = process.env.PORT || 3001
 
 app.use((req, res, next) => {
   const origin = req.headers.origin || ''
@@ -433,4 +433,4 @@ app.post('/api/club/:id/update', (req, res) => {
   res.json(club)
 })
 
-app.listen(PORT, () => console.log(`Review proxy running on http://localhost:${PORT}`))
+app.listen(PORT, '0.0.0.0', () => console.log(`Review proxy running on port ${PORT}`))
