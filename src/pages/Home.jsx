@@ -39,10 +39,10 @@ function pickGenres(n = 4) {
   return shuffled.slice(0, n)
 }
 
-// Deduplicate books by id, filter those without covers
+// Deduplicate books by id
 function dedup(books) {
   const seen = new Set()
-  return books.filter(b => b.cover && !seen.has(b.id) && seen.add(b.id))
+  return books.filter(b => !seen.has(b.id) && seen.add(b.id))
 }
 
 function pickRandom(arr, n) {

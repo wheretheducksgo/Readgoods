@@ -97,7 +97,12 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('series:', d.get\\('series'\\)\\); print\\('subjects:', [s for s in \\(d.get\\('subjects'\\) or []\\) if 'erie' in s]\\)\")",
       "Bash(curl -s \"https://www.googleapis.com/books/v1/volumes?q=subject:fiction&maxResults=15&orderBy=newest&printType=books\")",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(f\\\\\"{v['volumeInfo'].get\\('publishedDate','?'\\):12} {v['volumeInfo'].get\\('title','?'\\)[:60]}\\\\\"\\) for v in d.get\\('items',[]\\)]\")",
-      "Bash(curl -v \"https://www.googleapis.com/books/v1/volumes?q=subject:fiction&maxResults=5&orderBy=newest&printType=books\")"
+      "Bash(curl -v \"https://www.googleapis.com/books/v1/volumes?q=subject:fiction&maxResults=5&orderBy=newest&printType=books\")",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(curl -s \"https://readgoods-production.up.railway.app/api/health\")",
+      "Bash(curl -s \"https://readgoods-production.up.railway.app/api/reviews?title=dune&author=Frank+Herbert\")"
     ]
   }
 }
