@@ -85,7 +85,7 @@ function CustomerReviewPanel({ book }) {
         <div className="flex items-center gap-2">
           <Star size={15} fill={c.star} stroke="none" />
           <span style={{ fontFamily: '"Lora", serif', fontWeight: 600, color: c.textPrimary, fontSize: '0.95rem' }}>
-            Community Ratings
+            Global Ratings
           </span>
         </div>
         {state === 'done' && data?.found && (

@@ -45,10 +45,16 @@ export async function addToShelf(shelf, book) {
     lsSet(shelves)
     return
   }
-  await supabase.from('shelves').upsert(
-    { user_id: uid, book_id: book.id, shelf, book_data: book, added_at: new Date().toISOString() },
-    { onConflict: 'user_id,book_id' }
-  )
+  await Promise.all([
+    supabase.from('shelves').upsert(
+      { user_id: uid, book_id: book.id, shelf, book_data: book, added_at: new Date().toISOString() },
+      { onConflict: 'user_id,book_id' }
+    ),
+    supabase.from('book_cache').upsert(
+      { book_id: book.id, title: book.title, author: book.authors?.[0] || '', cover: book.cover || null },
+      { onConflict: 'book_id' }
+    ),
+  ])
 }
 
 export async function removeFromShelves(bookId) {

@@ -14,6 +14,7 @@ import BookClub from './pages/BookClub'
 import Auth from './pages/Auth'
 import Import from './pages/Import'
 import Analytics from './pages/Analytics'
+import Community from './pages/Community'
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/auth" element={<Auth />} />
           <Route path="/import" element={<Import />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/community" element={<Community />} />
         </Routes>
       </Layout>
     </BrowserRouter>
