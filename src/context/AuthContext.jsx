@@ -100,6 +100,7 @@ export function AuthProvider({ children }) {
         localStorage.removeItem('readgoods_moods')
         localStorage.removeItem('readgoods_reading_log')
         localStorage.removeItem('readgoods_goals')
+        localStorage.removeItem('readgoods_ratings')
       }
     })
 
