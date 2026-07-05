@@ -93,6 +93,13 @@ export function AuthProvider({ children }) {
       setUser(u)
       if (event === 'SIGNED_IN' && u) {
         await migrateLocalStorage(u.id)
+        // Always clear localStorage on sign-in — data lives in Supabase now
+        localStorage.removeItem('readgoods_shelves')
+        localStorage.removeItem('readgoods_notes')
+        localStorage.removeItem('readgoods_highlights')
+        localStorage.removeItem('readgoods_moods')
+        localStorage.removeItem('readgoods_reading_log')
+        localStorage.removeItem('readgoods_goals')
       }
     })
 
