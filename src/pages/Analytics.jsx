@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Flame, Clock, CalendarDays, BookOpen, Trash2, Plus } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Flame, Clock, CalendarDays, BookOpen, Trash2, Plus, Play, Pause, RotateCcw, Timer } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getShelves } from '../lib/shelves'
 import { logSession, deleteSession, getSessions, computeStats, buildHeatmapGrid, fmtMinutes } from '../lib/analytics'
@@ -119,6 +119,87 @@ function StatCard({ icon: Icon, label, value, sub }) {
         {value}
       </span>
       {sub && <span style={{ fontSize: '0.75rem', color: c.textSecondary }}>{sub}</span>}
+    </div>
+  )
+}
+
+function Stopwatch({ onUse }) {
+  const [seconds, setSeconds] = useState(0)
+  const [running, setRunning] = useState(false)
+  const intervalRef = useRef(null)
+
+  useEffect(() => {
+    if (running) {
+      intervalRef.current = setInterval(() => setSeconds(s => s + 1), 1000)
+    } else {
+      clearInterval(intervalRef.current)
+    }
+    return () => clearInterval(intervalRef.current)
+  }, [running])
+
+  function reset() {
+    setRunning(false)
+    setSeconds(0)
+  }
+
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  const display = h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+
+  const canUse = seconds >= 60
+
+  return (
+    <div className="rounded-xl p-4" style={{ backgroundColor: c.surface2, border: `1px solid ${c.border}` }}>
+      <div className="flex items-center gap-2 mb-3">
+        <Timer size={13} style={{ color: c.accentText }} />
+        <span style={{ fontSize: '0.72rem', color: c.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stopwatch</span>
+      </div>
+
+      {/* Timer display */}
+      <div
+        className="text-center py-3 rounded-lg mb-3"
+        style={{ fontFamily: 'monospace', fontSize: '2rem', fontWeight: 700, color: running ? c.accentText : c.textPrimary, letterSpacing: '0.05em', backgroundColor: c.bg }}
+      >
+        {display}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setRunning(r => !r)}
+          className="flex-1 inline-flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium"
+          style={{ backgroundColor: running ? c.surface : c.btnPrimary, color: running ? c.textPrimary : c.btnPrimaryText, border: `1px solid ${c.border}`, cursor: 'pointer' }}
+        >
+          {running ? <><Pause size={13} /> Pause</> : <><Play size={13} /> {seconds > 0 ? 'Resume' : 'Start'}</>}
+        </button>
+        {seconds > 0 && (
+          <button
+            type="button"
+            onClick={reset}
+            className="inline-flex items-center justify-center px-3 py-2 rounded-lg"
+            style={{ backgroundColor: 'transparent', color: c.textMuted, border: `1px solid ${c.border}`, cursor: 'pointer' }}
+            title="Reset"
+          >
+            <RotateCcw size={13} />
+          </button>
+        )}
+        {canUse && !running && (
+          <button
+            type="button"
+            onClick={() => { onUse(Math.round(seconds / 60)); reset() }}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium"
+            style={{ backgroundColor: c.accentBg, color: c.accentText, border: `1px solid ${c.border}`, cursor: 'pointer' }}
+          >
+            Use {Math.round(seconds / 60)}m
+          </button>
+        )}
+      </div>
+      {!canUse && seconds > 0 && !running && (
+        <p style={{ fontSize: '0.7rem', color: c.textMuted, marginTop: 8, textAlign: 'center' }}>Read for at least 1 minute to log a session</p>
+      )}
     </div>
   )
 }
@@ -273,6 +354,8 @@ export default function Analytics() {
                 />
               </div>
             </div>
+
+            <Stopwatch onUse={mins => setForm(f => ({ ...f, minutes: String(mins) }))} />
 
             <div>
               <label style={{ fontSize: '0.75rem', color: c.textMuted, display: 'block', marginBottom: 4 }}>Pages read <span style={{ color: c.textMuted }}>(optional)</span></label>
