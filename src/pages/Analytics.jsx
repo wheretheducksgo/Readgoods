@@ -126,6 +126,7 @@ function StatCard({ icon: Icon, label, value, sub }) {
 function Stopwatch({ onUse }) {
   const [seconds, setSeconds] = useState(0)
   const [running, setRunning] = useState(false)
+  const [filled, setFilled] = useState(false)
   const intervalRef = useRef(null)
 
   useEffect(() => {
@@ -140,6 +141,7 @@ function Stopwatch({ onUse }) {
   function reset() {
     setRunning(false)
     setSeconds(0)
+    setFilled(false)
   }
 
   const h = Math.floor(seconds / 3600)
@@ -149,16 +151,21 @@ function Stopwatch({ onUse }) {
     ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
     : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 
-  const canUse = seconds >= 60
+  const canFill = seconds >= 60
+
+  function handleFill() {
+    onUse(h, m === 0 && seconds % 60 >= 30 ? 1 : m)
+    setFilled(true)
+  }
 
   return (
     <div className="rounded-xl p-4" style={{ backgroundColor: c.surface2, border: `1px solid ${c.border}` }}>
       <div className="flex items-center gap-2 mb-3">
         <Timer size={13} style={{ color: c.accentText }} />
         <span style={{ fontSize: '0.72rem', color: c.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stopwatch</span>
+        {filled && <span style={{ fontSize: '0.7rem', color: '#5cb87a', marginLeft: 'auto' }}>✓ time filled in</span>}
       </div>
 
-      {/* Timer display */}
       <div
         className="text-center py-3 rounded-lg mb-3"
         style={{ fontFamily: 'monospace', fontSize: '2rem', fontWeight: 700, color: running ? c.accentText : c.textPrimary, letterSpacing: '0.05em', backgroundColor: c.bg }}
@@ -169,7 +176,7 @@ function Stopwatch({ onUse }) {
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={() => setRunning(r => !r)}
+          onClick={() => { setRunning(r => !r); setFilled(false) }}
           className="flex-1 inline-flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium"
           style={{ backgroundColor: running ? c.surface : c.btnPrimary, color: running ? c.textPrimary : c.btnPrimaryText, border: `1px solid ${c.border}`, cursor: 'pointer' }}
         >
@@ -186,19 +193,19 @@ function Stopwatch({ onUse }) {
             <RotateCcw size={13} />
           </button>
         )}
-        {canUse && !running && (
+        {canFill && !running && (
           <button
             type="button"
-            onClick={() => { onUse(Math.round(seconds / 60)); reset() }}
+            onClick={handleFill}
             className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium"
-            style={{ backgroundColor: c.accentBg, color: c.accentText, border: `1px solid ${c.border}`, cursor: 'pointer' }}
+            style={{ backgroundColor: filled ? c.surface : c.accentBg, color: filled ? c.textSecondary : c.accentText, border: `1px solid ${c.border}`, cursor: 'pointer' }}
           >
-            Use {Math.round(seconds / 60)}m
+            {filled ? 'Re-fill time' : 'Fill in time ↓'}
           </button>
         )}
       </div>
-      {!canUse && seconds > 0 && !running && (
-        <p style={{ fontSize: '0.7rem', color: c.textMuted, marginTop: 8, textAlign: 'center' }}>Read for at least 1 minute to log a session</p>
+      {!canFill && seconds > 0 && !running && (
+        <p style={{ fontSize: '0.7rem', color: c.textMuted, marginTop: 8, textAlign: 'center' }}>Read for at least 1 minute to fill time</p>
       )}
     </div>
   )
@@ -208,7 +215,7 @@ export default function Analytics() {
   const { user, loading: authLoading } = useAuth()
   const [sessions, setSessions] = useState([])
   const [allBooks, setAllBooks] = useState([])
-  const [form, setForm] = useState({ bookId: '', minutes: '', pages: '', date: new Date().toISOString().slice(0, 10) })
+  const [form, setForm] = useState({ bookId: '', hours: '', minutes: '', pages: '', date: new Date().toISOString().slice(0, 10) })
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
@@ -230,21 +237,22 @@ export default function Analytics() {
   async function handleLog(e) {
     e.preventDefault()
     setFormError('')
-    const mins = parseInt(form.minutes, 10)
+    const totalMins = (parseInt(form.hours, 10) || 0) * 60 + (parseInt(form.minutes, 10) || 0)
     if (!form.bookId) { setFormError('Please select a book.'); return }
-    if (!mins || mins < 1) { setFormError('Enter a valid number of minutes.'); return }
+    if (totalMins < 1) { setFormError('Enter how long you read (hours and/or minutes).'); return }
+    if (parseInt(form.minutes, 10) > 59) { setFormError('Minutes must be 0–59. Use the Hours field for longer sessions.'); return }
     const book = allBooks.find(b => b.id === form.bookId)
     setSaving(true)
     await logSession({
       bookId: form.bookId,
       bookTitle: book?.title || form.bookId,
       date: form.date,
-      minutes: mins,
+      minutes: totalMins,
       pages: parseInt(form.pages, 10) || null,
     })
     const updated = await getSessions()
     setSessions(updated)
-    setForm(f => ({ ...f, minutes: '', pages: '' }))
+    setForm(f => ({ ...f, hours: '', minutes: '', pages: '' }))
     setSaving(false)
   }
 
@@ -330,32 +338,48 @@ export default function Analytics() {
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label style={{ fontSize: '0.75rem', color: c.textMuted, display: 'block', marginBottom: 4 }}>Date</label>
-                <input
-                  type="date"
-                  value={form.date}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '0.75rem', color: c.textMuted, display: 'block', marginBottom: 4 }}>Minutes read</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="720"
-                  placeholder="e.g. 45"
-                  value={form.minutes}
-                  onChange={e => setForm(f => ({ ...f, minutes: e.target.value }))}
-                  style={inputStyle}
-                />
-              </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: c.textMuted, display: 'block', marginBottom: 4 }}>Date</label>
+              <input
+                type="date"
+                value={form.date}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                style={inputStyle}
+              />
             </div>
 
-            <Stopwatch onUse={mins => setForm(f => ({ ...f, minutes: String(mins) }))} />
+            <Stopwatch onUse={(h, m) => setForm(f => ({ ...f, hours: h > 0 ? String(h) : '', minutes: String(m) }))} />
+
+            <div>
+              <label style={{ fontSize: '0.75rem', color: c.textMuted, display: 'block', marginBottom: 4 }}>Time read</label>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 flex-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    placeholder="0"
+                    value={form.hours}
+                    onChange={e => setForm(f => ({ ...f, hours: e.target.value }))}
+                    style={{ ...inputStyle, textAlign: 'center' }}
+                  />
+                  <span style={{ fontSize: '0.8rem', color: c.textMuted, flexShrink: 0 }}>hr</span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    placeholder="0"
+                    value={form.minutes}
+                    onChange={e => setForm(f => ({ ...f, minutes: e.target.value }))}
+                    style={{ ...inputStyle, textAlign: 'center' }}
+                  />
+                  <span style={{ fontSize: '0.8rem', color: c.textMuted, flexShrink: 0 }}>min</span>
+                </div>
+              </div>
+            </div>
 
             <div>
               <label style={{ fontSize: '0.75rem', color: c.textMuted, display: 'block', marginBottom: 4 }}>Pages read <span style={{ color: c.textMuted }}>(optional)</span></label>
