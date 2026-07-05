@@ -85,6 +85,7 @@ export default function Community() {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [activeTags, setActiveTags] = useState([])
+  const [tagInput, setTagInput] = useState('')
   const [minRating, setMinRating] = useState(0)
   const [allTags, setAllTags] = useState([])
   const [books, setBooks] = useState([])
@@ -111,6 +112,17 @@ export default function Community() {
   function toggleTag(tag) {
     setActiveTags(t => t.includes(tag) ? t.filter(x => x !== tag) : [...t, tag])
   }
+
+  function addTagFromInput() {
+    const tag = tagInput.trim()
+    if (!tag || activeTags.includes(tag)) { setTagInput(''); return }
+    setActiveTags(t => [...t, tag])
+    setTagInput('')
+  }
+
+  const filteredSuggestions = tagInput.trim()
+    ? allTags.filter(t => t.toLowerCase().includes(tagInput.toLowerCase()) && !activeTags.includes(t))
+    : allTags.filter(t => !activeTags.includes(t))
 
   const hasFilters = query || activeTags.length > 0 || minRating > 0
 
@@ -169,32 +181,71 @@ export default function Community() {
         </div>
 
         {/* Tag filters */}
-        {allTags.length > 0 && (
-          <div>
-            <span style={{ fontSize: '0.75rem', color: c.textMuted, display: 'block', marginBottom: 8 }}>Filter by tag:</span>
-            <div className="flex flex-wrap gap-2">
-              {allTags.map(tag => {
-                const on = activeTags.includes(tag)
-                return (
-                  <button
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium"
-                    style={{
-                      backgroundColor: on ? c.accentBg : c.surface2,
-                      color: on ? c.accentText : c.textSecondary,
-                      border: `1px solid ${on ? c.accent : c.border}`,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {tag}
-                    {on && <X size={10} />}
-                  </button>
-                )
-              })}
+        <div>
+          <span style={{ fontSize: '0.75rem', color: c.textMuted, display: 'block', marginBottom: 8 }}>Filter by tag:</span>
+
+          {/* Active tags */}
+          {activeTags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {activeTags.map(tag => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                  style={{ backgroundColor: c.accentBg, color: c.accentText, border: `1px solid ${c.accent}`, cursor: 'pointer' }}
+                >
+                  {tag} <X size={10} />
+                </button>
+              ))}
             </div>
+          )}
+
+          {/* Tag text input */}
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              type="text"
+              value={tagInput}
+              onChange={e => setTagInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTagFromInput() } }}
+              placeholder="Type a tag and press Enter…"
+              style={{
+                flex: 1,
+                backgroundColor: c.surface2,
+                border: `1px solid ${c.border}`,
+                borderRadius: 8,
+                color: c.textPrimary,
+                fontSize: '0.82rem',
+                padding: '6px 11px',
+                outline: 'none',
+              }}
+            />
+            {tagInput.trim() && (
+              <button
+                onClick={addTagFromInput}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                style={{ backgroundColor: c.accentBg, color: c.accentText, border: `1px solid ${c.border}`, cursor: 'pointer' }}
+              >
+                Add
+              </button>
+            )}
           </div>
-        )}
+
+          {/* Suggestions */}
+          {filteredSuggestions.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {filteredSuggestions.map(tag => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className="px-2.5 py-1 rounded-full text-xs"
+                  style={{ backgroundColor: c.surface2, color: c.textSecondary, border: `1px solid ${c.border}`, cursor: 'pointer' }}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Active filter summary + clear */}
         {hasFilters && (
