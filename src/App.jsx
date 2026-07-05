@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
 import Layout from './components/Layout'
 import Home from './pages/Home'
 import Search from './pages/Search'
@@ -10,9 +11,11 @@ import Library from './pages/Library'
 import YearInReview from './pages/YearInReview'
 import LibraryGraph from './pages/LibraryGraph'
 import BookClub from './pages/BookClub'
+import Auth from './pages/Auth'
 
 export default function App() {
   return (
+    <AuthProvider>
     <BrowserRouter>
       <Layout>
         <Routes>
@@ -28,8 +31,10 @@ export default function App() {
           <Route path="/year-in-review/:year" element={<YearInReview />} />
           <Route path="/club/new" element={<BookClub />} />
           <Route path="/club/:id" element={<BookClub />} />
+          <Route path="/auth" element={<Auth />} />
         </Routes>
       </Layout>
     </BrowserRouter>
+    </AuthProvider>
   )
 }

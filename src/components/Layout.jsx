@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { BookOpen, Search, Home, Library, Users } from 'lucide-react'
+import UserMenu from './UserMenu'
 import { c } from '../lib/theme'
 
 const nav = [
@@ -41,6 +42,7 @@ export default function Layout({ children }) {
               )
             })}
           </nav>
+          <UserMenu />
         </div>
       </header>
 

@@ -149,7 +149,7 @@ export default function Library() {
   const [shelves, setShelves] = useState({})
 
   useEffect(() => {
-    setShelves(getShelves())
+    getShelves().then(setShelves)
   }, [])
 
   const total = Object.values(shelves).flat().length

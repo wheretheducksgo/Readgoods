@@ -4,11 +4,8 @@ import { BookOpen, Clock, CheckCheck, ArrowRight, Sparkles, TrendingUp, Star, Ca
 import { getShelves, getRecentBooks } from '../lib/shelves'
 import { searchBooks } from '../lib/googleBooks'
 import { getRandomHighlight } from '../lib/highlights'
+import { getAllNotes } from '../lib/notes'
 import GoalRing from '../components/GoalRing'
-
-function getNotesMap() {
-  try { return JSON.parse(localStorage.getItem('readgoods_notes') || '{}') } catch { return {} }
-}
 import { c } from '../lib/theme'
 
 const SHELF_META = {
@@ -243,62 +240,63 @@ export default function Home() {
   const thisYear = new Date().getFullYear()
 
   useEffect(() => {
-    const sh = getShelves()
-    setShelves(sh)
-    setRecent(getRecentBooks(8))
-    setRandomQuote(getRandomHighlight())
+    Promise.all([getShelves(), getRecentBooks(8), getRandomHighlight()]).then(([sh, recent, quote]) => {
+      setShelves(sh)
+      setRecent(recent)
+      setRandomQuote(quote)
 
-    const libraryBooks = Object.values(sh).flat()
+      const libraryBooks = Object.values(sh).flat()
 
-    // Fire off AI recommendation in parallel (won't block page sections)
-    if (libraryBooks.length > 0) {
-      setLoadingAiRec(true)
-      const notes = getNotesMap()
-      const notesList = Object.entries(notes).map(([bookId, v]) => {
-        const book = libraryBooks.find(b => b.id === bookId)
-        return book ? { title: book.title, note: v.text } : null
-      }).filter(Boolean)
+      // Fire off AI recommendation in parallel (won't block page sections)
+      if (libraryBooks.length > 0) {
+        setLoadingAiRec(true)
+        getAllNotes().then(notesList => {
+          const notesWithTitles = notesList.map(n => {
+            const book = libraryBooks.find(b => b.id === n.bookId)
+            return book ? { title: book.title, note: n.text } : null
+          }).filter(Boolean)
       fetch('/api/ai-recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          library: libraryBooks.map(b => ({ title: b.title, authors: b.authors, categories: b.categories })),
-          notes: notesList,
-        }),
-      })
-        .then(r => r.json())
-        .then(data => { if (data.recommendation) setAiRec(data.recommendation); else setAiRecFailed(true) })
-        .catch(() => setAiRecFailed(true))
-        .finally(() => setLoadingAiRec(false))
-    }
-
-    // Load sections serially. Only pause between sections when an API call is needed
-    // (cache hits are instant and don't count against rate limits).
-    const delay = ms => new Promise(r => setTimeout(r, ms))
-    const needsDelay = key => !scGet(key)
-
-    ;(async () => {
-      try { setRecommended(await fetchPopular()) } catch {}
-      setLoadingRec(false)
-
-      if (needsDelay('home:new')) await delay(800)
-      try { setNewBooks(await fetchNew()) } catch {}
-      setLoadingNew(false)
-
-      const fyKey = `home:foryou:${libraryBooks.map(b => b.id).sort().join(',')}`
-      if (needsDelay(fyKey)) await delay(800)
-      try { setForYou(await fetchForYou(libraryBooks)) } catch {}
-      setLoadingForYou(false)
-
-      const genreResults = []
-      for (const genre of selectedGenres) {
-        if (needsDelay(`home:genre:${genre.query}`)) await delay(800)
-        try { genreResults.push(await fetchGenre(genre.query)) }
-        catch { genreResults.push([]) }
-        setGenres([...genreResults, ...Array(selectedGenres.length - genreResults.length).fill([])])
+          body: JSON.stringify({
+            library: libraryBooks.map(b => ({ title: b.title, authors: b.authors, categories: b.categories })),
+            notes: notesWithTitles,
+          }),
+        })
+          .then(r => r.json())
+          .then(data => { if (data.recommendation) setAiRec(data.recommendation); else setAiRecFailed(true) })
+          .catch(() => setAiRecFailed(true))
+          .finally(() => setLoadingAiRec(false))
+        }) // end getAllNotes
       }
-      setLoadingGenres(false)
-    })()
+
+      // Load sections serially. Only pause between sections when an API call is needed
+      const delay = ms => new Promise(r => setTimeout(r, ms))
+      const needsDelay = key => !scGet(key)
+
+      ;(async () => {
+        try { setRecommended(await fetchPopular()) } catch {}
+        setLoadingRec(false)
+
+        if (needsDelay('home:new')) await delay(800)
+        try { setNewBooks(await fetchNew()) } catch {}
+        setLoadingNew(false)
+
+        const fyKey = `home:foryou:${libraryBooks.map(b => b.id).sort().join(',')}`
+        if (needsDelay(fyKey)) await delay(800)
+        try { setForYou(await fetchForYou(libraryBooks)) } catch {}
+        setLoadingForYou(false)
+
+        const genreResults = []
+        for (const genre of selectedGenres) {
+          if (needsDelay(`home:genre:${genre.query}`)) await delay(800)
+          try { genreResults.push(await fetchGenre(genre.query)) }
+          catch { genreResults.push([]) }
+          setGenres([...genreResults, ...Array(selectedGenres.length - genreResults.length).fill([])])
+        }
+        setLoadingGenres(false)
+      })()
+    }) // end Promise.all
   }, [])
 
   const counts = {

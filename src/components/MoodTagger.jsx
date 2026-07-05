@@ -6,15 +6,15 @@ export default function MoodTagger({ bookId }) {
   const [selected, setSelected] = useState([])
 
   useEffect(() => {
-    setSelected(getBookMoods(bookId))
+    getBookMoods(bookId).then(setSelected)
   }, [bookId])
 
-  function toggle(id) {
+  async function toggle(id) {
     const next = selected.includes(id)
       ? selected.filter(x => x !== id)
       : [...selected, id]
     setSelected(next)
-    setBookMoods(bookId, next)
+    await setBookMoods(bookId, next)
   }
 
   return (

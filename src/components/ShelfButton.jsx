@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, ChevronDown, BookOpen, Clock, CheckCheck, X } from 'lucide-react'
 import { addToShelf, removeFromShelves, getBookShelf } from '../lib/shelves'
 import { startReading, finishReading } from '../lib/readingLog'
@@ -12,17 +12,21 @@ const SHELVES = [
 
 export default function ShelfButton({ book, onUpdate }) {
   const [open, setOpen] = useState(false)
-  const [currentShelf, setCurrentShelf] = useState(() => getBookShelf(book.id))
+  const [currentShelf, setCurrentShelf] = useState(null)
 
-  function handleSelect(shelfId) {
+  useEffect(() => {
+    getBookShelf(book.id).then(setCurrentShelf)
+  }, [book.id])
+
+  async function handleSelect(shelfId) {
     if (currentShelf === shelfId) {
-      removeFromShelves(book.id)
+      await removeFromShelves(book.id)
       setCurrentShelf(null)
     } else {
-      addToShelf(shelfId, book)
+      await addToShelf(shelfId, book)
       setCurrentShelf(shelfId)
-      if (shelfId === 'currently-reading') startReading(book.id, book.pageCount)
-      if (shelfId === 'read') finishReading(book.id)
+      if (shelfId === 'currently-reading') await startReading(book.id, book.pageCount)
+      if (shelfId === 'read') await finishReading(book.id)
     }
     setOpen(false)
     onUpdate?.()

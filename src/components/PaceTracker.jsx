@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Zap, Plus } from 'lucide-react'
 import { getBookLog, startReading, logSession, getPaceStats } from '../lib/readingLog'
+
 import { c } from '../lib/theme'
 
 export default function PaceTracker({ bookId, totalPages }) {
@@ -8,22 +9,27 @@ export default function PaceTracker({ bookId, totalPages }) {
   const [input, setInput] = useState('')
   const [showInput, setShowInput] = useState(false)
 
+  const [log, setLog] = useState(null)
+
   useEffect(() => {
-    startReading(bookId, totalPages)
-    setStats(getPaceStats(bookId))
+    startReading(bookId, totalPages).then(() =>
+      getPaceStats(bookId).then(s => {
+        setStats(s)
+        getBookLog(bookId).then(setLog)
+      })
+    )
   }, [bookId, totalPages])
 
-  function handleLog(e) {
+  async function handleLog(e) {
     e.preventDefault()
     const n = parseInt(input, 10)
     if (!n || n < 1) return
-    logSession(bookId, n)
-    setStats(getPaceStats(bookId))
+    await logSession(bookId, n)
+    const s = await getPaceStats(bookId)
+    setStats(s)
     setInput('')
     setShowInput(false)
   }
-
-  const log = getBookLog(bookId)
   const pct = stats?.pctDone ?? 0
 
   return (

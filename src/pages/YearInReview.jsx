@@ -47,51 +47,44 @@ export default function YearInReview() {
     const start = new Date(year, 0, 1).getTime()
     const end   = new Date(year + 1, 0, 1).getTime()
 
-    const shelves = getShelves()
-    const readBooks = (shelves['read'] || []).filter(b => b.addedAt >= start && b.addedAt < end)
+    Promise.all([getShelves(), getLog()]).then(([shelves, log]) => {
+      const readBooks = (shelves['read'] || []).filter(b => b.addedAt >= start && b.addedAt < end)
 
-    // Pages
-    const totalPages = readBooks.reduce((s, b) => s + (b.pageCount || 0), 0)
+      const totalPages = readBooks.reduce((s, b) => s + (b.pageCount || 0), 0)
 
-    // Genre tally
-    const genreCounts = {}
-    for (const b of readBooks) {
-      for (const g of (b.categories || [])) genreCounts[g] = (genreCounts[g] || 0) + 1
-    }
-    const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0] || null
+      const genreCounts = {}
+      for (const b of readBooks) {
+        for (const g of (b.categories || [])) genreCounts[g] = (genreCounts[g] || 0) + 1
+      }
+      const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0] || null
 
-    // Author tally
-    const authCounts = {}
-    for (const b of readBooks) {
-      const a = b.authors?.[0]
-      if (a) authCounts[a] = (authCounts[a] || 0) + 1
-    }
-    const topAuthor = Object.entries(authCounts).sort((a, b) => b[1] - a[1])[0] || null
+      const authCounts = {}
+      for (const b of readBooks) {
+        const a = b.authors?.[0]
+        if (a) authCounts[a] = (authCounts[a] || 0) + 1
+      }
+      const topAuthor = Object.entries(authCounts).sort((a, b) => b[1] - a[1])[0] || null
 
-    // Longest / shortest
-    const withPages = readBooks.filter(b => b.pageCount)
-    const longest  = withPages.sort((a, b) => b.pageCount - a.pageCount)[0] || null
-    const shortest = withPages.sort((a, b) => a.pageCount - b.pageCount)[0] || null
+      const withPages = readBooks.filter(b => b.pageCount)
+      const longest  = [...withPages].sort((a, b) => b.pageCount - a.pageCount)[0] || null
+      const shortest = [...withPages].sort((a, b) => a.pageCount - b.pageCount)[0] || null
 
-    // Highest rated
-    const withRating = readBooks.filter(b => b.averageRating)
-    const topRated = withRating.sort((a, b) => b.averageRating - a.averageRating)[0] || null
+      const withRating = readBooks.filter(b => b.averageRating)
+      const topRated = [...withRating].sort((a, b) => b.averageRating - a.averageRating)[0] || null
 
-    // Reading log stats — total pages logged
-    const log = getLog()
-    const loggedPages = Object.values(log).reduce((s, e) => {
-      return s + e.sessions.filter(ses => ses.date >= start && ses.date < end)
-                           .reduce((ss, ses) => ss + ses.pagesRead, 0)
-    }, 0)
+      const loggedPages = Object.values(log).reduce((s, e) => {
+        return s + (e.sessions || []).filter(ses => ses.date >= start && ses.date < end)
+                             .reduce((ss, ses) => ss + ses.pagesRead, 0)
+      }, 0)
 
-    // Monthly breakdown
-    const byMonth = Array.from({ length: 12 }, () => 0)
-    for (const b of readBooks) {
-      const m = new Date(b.addedAt).getMonth()
-      byMonth[m]++
-    }
+      const byMonth = Array.from({ length: 12 }, () => 0)
+      for (const b of readBooks) {
+        const m = new Date(b.addedAt).getMonth()
+        byMonth[m]++
+      }
 
-    setData({ readBooks, totalPages, topGenre, topAuthor, longest, shortest, topRated, loggedPages, byMonth })
+      setData({ readBooks, totalPages, topGenre, topAuthor, longest, shortest, topRated, loggedPages, byMonth })
+    })
   }, [year])
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']

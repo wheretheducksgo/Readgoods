@@ -34,8 +34,7 @@ export default function Shelf() {
   const Icon = meta.icon
 
   useEffect(() => {
-    const shelves = getShelves()
-    setBooks(shelves[id] || [])
+    getShelves().then(shelves => setBooks(shelves[id] || []))
   }, [id])
 
   const sorted = sortBooks(books, sort)

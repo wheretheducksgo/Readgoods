@@ -195,9 +195,7 @@ export default function Book() {
     setBook(null)
     setRelated([])
     setExpanded(false)
-    const shelf = getBookShelf(id)
-    setOnShelf(!!shelf)
-    setCurrentShelf(shelf)
+    getBookShelf(id).then(shelf => { setOnShelf(!!shelf); setCurrentShelf(shelf) })
     getVolume(id)
       .then(b => {
         setBook(b)

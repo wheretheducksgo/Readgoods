@@ -111,7 +111,7 @@ export default function LibraryGraph() {
   const graphRef = useRef(null)
 
   useEffect(() => {
-    const shelves = getShelves()
+    getShelves().then(shelves => {
     const books = Object.values(shelves).flat()
     if (!books.length) { setGraph({ nodes: [], edges: [] }); return }
     const g = buildGraph(books)
@@ -128,6 +128,7 @@ export default function LibraryGraph() {
     }
     rafRef.current = requestAnimationFrame(loop)
     return () => { running = false; cancelAnimationFrame(rafRef.current) }
+    }) // end getShelves().then
   }, [])
 
   // Drag support
@@ -161,7 +162,7 @@ export default function LibraryGraph() {
   const edges = graphRef.current?.edges || []
   const hoveredNode = hovered !== null ? nodes[hovered] : null
 
-  const totalBooks = getShelves ? Object.values(getShelves()).flat().length : 0
+  const totalBooks = graph ? graph.nodes.length : 0
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">

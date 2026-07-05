@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Target } from 'lucide-react'
 import { getGoal, setGoal } from '../lib/goals'
 import { c } from '../lib/theme'
@@ -9,19 +9,21 @@ const R = (SIZE - STROKE) / 2
 const CIRC = 2 * Math.PI * R
 
 export default function GoalRing({ year, booksRead }) {
-  const [goal, setGoalState] = useState(() => getGoal(year))
+  const [goal, setGoalState] = useState(null)
   const [editing, setEditing] = useState(false)
   const [input, setInput] = useState('')
 
-  function save(e) {
+  useEffect(() => { getGoal(year).then(setGoalState) }, [year])
+
+  async function save(e) {
     e.preventDefault()
     const n = parseInt(input, 10)
-    if (n > 0) { setGoal(year, n); setGoalState(n) }
+    if (n > 0) { await setGoal(year, n); setGoalState(n) }
     setEditing(false)
   }
 
-  function clear() {
-    setGoal(year, null)
+  async function clear() {
+    await setGoal(year, null)
     setGoalState(null)
     setEditing(false)
   }

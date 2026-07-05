@@ -4,38 +4,32 @@ import { ArrowLeft, BookOpen, Save, Trash2, Quote, Plus, X } from 'lucide-react'
 import { getVolume } from '../lib/googleBooks'
 import { getBookShelf } from '../lib/shelves'
 import { getBookHighlights, addHighlight, removeHighlight } from '../lib/highlights'
+import { getNote, saveNote } from '../lib/notes'
 import { c } from '../lib/theme'
 
-const NOTES_KEY = 'readgoods_notes'
-
-function getNotes() {
-  try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '{}') } catch { return {} }
-}
-function saveNote(bookId, text) {
-  const notes = getNotes()
-  if (text.trim()) notes[bookId] = { text, updatedAt: Date.now() }
-  else delete notes[bookId]
-  localStorage.setItem(NOTES_KEY, JSON.stringify(notes))
-}
-
 function HighlightsPanel({ bookId }) {
-  const [highlights, setHighlights] = useState(() => getBookHighlights(bookId))
+  const [highlights, setHighlights] = useState([])
   const [quoteText, setQuoteText] = useState('')
   const [page, setPage] = useState('')
   const [adding, setAdding] = useState(false)
 
-  function handleAdd(e) {
+  useEffect(() => {
+    getBookHighlights(bookId).then(setHighlights)
+  }, [bookId])
+
+  async function handleAdd(e) {
     e.preventDefault()
     if (!quoteText.trim()) return
-    setHighlights(addHighlight(bookId, quoteText, page || null))
+    const updated = await addHighlight(bookId, quoteText, page || null)
+    setHighlights(updated)
     setQuoteText('')
     setPage('')
     setAdding(false)
   }
 
-  function handleRemove(id) {
-    removeHighlight(bookId, id)
-    setHighlights(getBookHighlights(bookId))
+  async function handleRemove(id) {
+    await removeHighlight(bookId, id)
+    getBookHighlights(bookId).then(setHighlights)
   }
 
   return (
@@ -133,9 +127,8 @@ export default function BookNotes() {
 
   useEffect(() => {
     getVolume(id).then(setBook).catch(() => {})
-    setShelf(getBookShelf(id))
-    const existing = getNotes()[id]
-    if (existing) setText(existing.text)
+    getBookShelf(id).then(setShelf)
+    getNote(id).then(t => { if (t) setText(t) })
   }, [id])
 
   function handleChange(e) {
