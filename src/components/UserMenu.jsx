@@ -47,7 +47,7 @@ export default function UserMenu() {
               <p className="text-xs font-medium truncate" style={{ color: c.textPrimary }}>{user.email}</p>
             </div>
             <button
-              onClick={async () => { setOpen(false); await signOut() }}
+              onClick={async () => { setOpen(false); await signOut(); window.location.href = '/' }}
               className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left"
               style={{ color: c.textSecondary, border: 'none', backgroundColor: 'transparent', cursor: 'pointer' }}
             >

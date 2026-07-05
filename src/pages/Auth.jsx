@@ -23,7 +23,7 @@ export default function Auth() {
     if (mode === 'signin') {
       const err = await signInWithEmail(email, password)
       if (err) setError(err.message)
-      else navigate('/')
+      else window.location.href = '/'
     } else {
       const err = await signUpWithEmail(email, password)
       if (err) setError(err.message)
