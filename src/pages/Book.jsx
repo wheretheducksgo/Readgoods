@@ -10,7 +10,7 @@ import { getVolume, getRelatedBooks } from '../lib/googleBooks'
 import { getBookReviews, getAISummary } from '../lib/aiReview'
 import { getBookShelf } from '../lib/shelves'
 import { finishReading } from '../lib/readingLog'
-import { getBookRating, setBookRating } from '../lib/ratings'
+import { getBookRating, setBookRating, getBookReview, setBookReview } from '../lib/ratings'
 import MoodTagger from '../components/MoodTagger'
 import PaceTracker from '../components/PaceTracker'
 import { c } from '../lib/theme'
@@ -191,6 +191,22 @@ export default function Book() {
   const [onShelf, setOnShelf] = useState(false)
   const [currentShelf, setCurrentShelf] = useState(null)
   const [myRating, setMyRating] = useState(null)
+  const [myReview, setMyReview] = useState('')
+  const [reviewSaved, setReviewSaved] = useState(false)
+
+  async function refreshShelfState() {
+    const shelf = await getBookShelf(id)
+    setOnShelf(!!shelf)
+    setCurrentShelf(shelf)
+    if (shelf) {
+      const [rating, review] = await Promise.all([getBookRating(id), getBookReview(id)])
+      setMyRating(rating)
+      setMyReview(review)
+    } else {
+      setMyRating(null)
+      setMyReview('')
+    }
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -198,10 +214,17 @@ export default function Book() {
     setRelated([])
     setExpanded(false)
     setMyRating(null)
+    setMyReview('')
+    setReviewSaved(false)
     getBookShelf(id).then(shelf => {
       setOnShelf(!!shelf)
       setCurrentShelf(shelf)
-      if (shelf) getBookRating(id).then(setMyRating)
+      if (shelf) {
+        Promise.all([getBookRating(id), getBookReview(id)]).then(([rating, review]) => {
+          setMyRating(rating)
+          setMyReview(review)
+        })
+      }
     })
     getVolume(id)
       .then(b => {
@@ -329,7 +352,7 @@ export default function Book() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <ShelfButton book={book} />
+            <ShelfButton book={book} onUpdate={refreshShelfState} />
             <Link
               to={`/connections/${book.id}`}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium"
@@ -398,7 +421,7 @@ export default function Book() {
                 <p style={{ fontSize: '0.7rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.textMuted, marginBottom: 8 }}>
                   My Rating
                 </p>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 mb-3">
                   {[1, 2, 3, 4, 5].map(star => (
                     <button
                       key={star}
@@ -406,6 +429,7 @@ export default function Book() {
                         const next = myRating === star ? null : star
                         setMyRating(next)
                         await setBookRating(book.id, next)
+                        if (!next) { setMyReview(''); await setBookReview(book.id, '') }
                       }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
                     >
@@ -420,6 +444,36 @@ export default function Book() {
                     <span className="ml-2 text-sm" style={{ color: c.warm }}>{myRating}.0</span>
                   )}
                 </div>
+                {myRating && (
+                  <div>
+                    <textarea
+                      placeholder="Write a review… (optional)"
+                      value={myReview}
+                      rows={3}
+                      onChange={e => { setMyReview(e.target.value); setReviewSaved(false) }}
+                      onBlur={async () => {
+                        await setBookReview(book.id, myReview)
+                        setReviewSaved(true)
+                        setTimeout(() => setReviewSaved(false), 2000)
+                      }}
+                      style={{
+                        width: '100%',
+                        backgroundColor: c.surface2,
+                        border: `1px solid ${c.border}`,
+                        borderRadius: 8,
+                        color: c.textPrimary,
+                        fontSize: '0.85rem',
+                        padding: '8px 12px',
+                        outline: 'none',
+                        resize: 'vertical',
+                        lineHeight: 1.6,
+                      }}
+                    />
+                    {reviewSaved && (
+                      <p style={{ fontSize: '0.72rem', color: '#5cb87a', marginTop: 4 }}>Review saved</p>
+                    )}
+                  </div>
+                )}
               </div>
               <div style={{ borderTop: `1px solid ${c.border}`, marginBottom: 16 }} />
               <MoodTagger bookId={book.id} />
