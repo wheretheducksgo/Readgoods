@@ -10,6 +10,7 @@ import { getVolume, getRelatedBooks } from '../lib/googleBooks'
 import { getBookReviews, getAISummary } from '../lib/aiReview'
 import { getBookShelf } from '../lib/shelves'
 import { finishReading } from '../lib/readingLog'
+import { getBookRating, setBookRating } from '../lib/ratings'
 import MoodTagger from '../components/MoodTagger'
 import PaceTracker from '../components/PaceTracker'
 import { c } from '../lib/theme'
@@ -189,13 +190,19 @@ export default function Book() {
   const [expanded, setExpanded] = useState(false)
   const [onShelf, setOnShelf] = useState(false)
   const [currentShelf, setCurrentShelf] = useState(null)
+  const [myRating, setMyRating] = useState(null)
 
   useEffect(() => {
     setLoading(true)
     setBook(null)
     setRelated([])
     setExpanded(false)
-    getBookShelf(id).then(shelf => { setOnShelf(!!shelf); setCurrentShelf(shelf) })
+    setMyRating(null)
+    getBookShelf(id).then(shelf => {
+      setOnShelf(!!shelf)
+      setCurrentShelf(shelf)
+      if (shelf) getBookRating(id).then(setMyRating)
+    })
     getVolume(id)
       .then(b => {
         setBook(b)
@@ -386,6 +393,35 @@ export default function Book() {
               className="rounded-xl p-5 mb-6"
               style={{ border: `1px solid ${c.border}`, backgroundColor: c.surface }}
             >
+              {/* Personal rating */}
+              <div className="mb-5">
+                <p style={{ fontSize: '0.7rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.textMuted, marginBottom: 8 }}>
+                  My Rating
+                </p>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      onClick={async () => {
+                        const next = myRating === star ? null : star
+                        setMyRating(next)
+                        await setBookRating(book.id, next)
+                      }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
+                    >
+                      <Star
+                        size={22}
+                        fill={myRating >= star ? c.star : 'none'}
+                        stroke={myRating >= star ? c.star : c.textMuted}
+                      />
+                    </button>
+                  ))}
+                  {myRating && (
+                    <span className="ml-2 text-sm" style={{ color: c.warm }}>{myRating}.0</span>
+                  )}
+                </div>
+              </div>
+              <div style={{ borderTop: `1px solid ${c.border}`, marginBottom: 16 }} />
               <MoodTagger bookId={book.id} />
               {currentShelf === 'currently-reading' && (
                 <div className="mt-5 pt-5" style={{ borderTop: `1px solid ${c.borderSoft}` }}>

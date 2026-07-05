@@ -2,6 +2,12 @@ import 'dotenv/config'
 import express from 'express'
 import axios from 'axios'
 import Anthropic from '@anthropic-ai/sdk'
+import { createClient } from '@supabase/supabase-js'
+
+const sb = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY
+)
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -392,47 +398,77 @@ Respond in this exact JSON format:
 
 // ── Book Club ─────────────────────────────────────────────────────────────────
 
-const clubs = new Map()
-
 function makeId() {
   return Math.random().toString(36).slice(2, 8).toUpperCase()
 }
 
 // POST /api/club — create a new club
-app.post('/api/club', (req, res) => {
+app.post('/api/club', async (req, res) => {
   const { bookId, bookTitle, bookCover, creatorName } = req.body
   if (!bookId || !bookTitle || !creatorName) return res.status(400).json({ error: 'Missing fields' })
   const id = makeId()
-  clubs.set(id, {
-    id, bookId, bookTitle, bookCover: bookCover || null,
-    createdAt: Date.now(),
+  const { error } = await sb.from('book_clubs').insert({
+    id,
+    book_id: bookId,
+    book_title: bookTitle,
+    book_cover: bookCover || null,
     members: [{ name: creatorName, progress: '', note: '', updatedAt: Date.now() }],
   })
+  if (error) { console.error(error); return res.status(500).json({ error: 'DB error' }) }
   res.json({ clubId: id })
 })
 
 // GET /api/club/:id — fetch club data
-app.get('/api/club/:id', (req, res) => {
-  const club = clubs.get(req.params.id.toUpperCase())
-  if (!club) return res.status(404).json({ error: 'Club not found' })
-  res.json(club)
+app.get('/api/club/:id', async (req, res) => {
+  const { data, error } = await sb
+    .from('book_clubs')
+    .select('*')
+    .eq('id', req.params.id.toUpperCase())
+    .maybeSingle()
+  if (error || !data) return res.status(404).json({ error: 'Club not found' })
+  res.json({
+    id: data.id,
+    bookId: data.book_id,
+    bookTitle: data.book_title,
+    bookCover: data.book_cover,
+    createdAt: new Date(data.created_at).getTime(),
+    members: data.members || [],
+  })
 })
 
 // POST /api/club/:id/update — upsert a member's progress/note
-app.post('/api/club/:id/update', (req, res) => {
-  const club = clubs.get(req.params.id.toUpperCase())
-  if (!club) return res.status(404).json({ error: 'Club not found' })
+app.post('/api/club/:id/update', async (req, res) => {
+  const clubId = req.params.id.toUpperCase()
+  const { data: club, error } = await sb
+    .from('book_clubs')
+    .select('members')
+    .eq('id', clubId)
+    .maybeSingle()
+  if (error || !club) return res.status(404).json({ error: 'Club not found' })
+
   const { name, progress, note } = req.body
   if (!name) return res.status(400).json({ error: 'Name required' })
-  const existing = club.members.find(m => m.name.toLowerCase() === name.toLowerCase())
-  if (existing) {
-    existing.progress = progress ?? existing.progress
-    existing.note = note ?? existing.note
-    existing.updatedAt = Date.now()
+
+  const members = club.members || []
+  const idx = members.findIndex(m => m.name.toLowerCase() === name.toLowerCase())
+  if (idx >= 0) {
+    members[idx] = { ...members[idx], progress: progress ?? members[idx].progress, note: note ?? members[idx].note, updatedAt: Date.now() }
   } else {
-    club.members.push({ name, progress: progress || '', note: note || '', updatedAt: Date.now() })
+    members.push({ name, progress: progress || '', note: note || '', updatedAt: Date.now() })
   }
-  res.json(club)
+
+  const { error: upErr } = await sb.from('book_clubs').update({ members }).eq('id', clubId)
+  if (upErr) { console.error(upErr); return res.status(500).json({ error: 'DB error' }) }
+
+  const { data: updated } = await sb.from('book_clubs').select('*').eq('id', clubId).maybeSingle()
+  res.json({
+    id: updated.id,
+    bookId: updated.book_id,
+    bookTitle: updated.book_title,
+    bookCover: updated.book_cover,
+    createdAt: new Date(updated.created_at).getTime(),
+    members: updated.members || [],
+  })
 })
 
 app.listen(PORT, '0.0.0.0', () => console.log(`Review proxy running on port ${PORT}`))
