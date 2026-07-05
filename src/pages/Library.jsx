@@ -169,15 +169,24 @@ export default function Library() {
             {hasBooks ? `${total} book${total !== 1 ? 's' : ''} across your shelves` : 'Your library is empty — start adding books.'}
           </p>
         </div>
-        {hasBooks && (
+        <div className="flex items-center gap-2 flex-shrink-0">
           <Link
-            to="/library/graph"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium flex-shrink-0"
-            style={{ backgroundColor: c.surface, color: c.accentText, border: `1px solid ${c.border}` }}
+            to="/import"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium"
+            style={{ backgroundColor: c.surface, color: c.textSecondary, border: `1px solid ${c.border}` }}
           >
-            View Connections
+            Import / Export
           </Link>
-        )}
+          {hasBooks && (
+            <Link
+              to="/library/graph"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium"
+              style={{ backgroundColor: c.surface, color: c.accentText, border: `1px solid ${c.border}` }}
+            >
+              View Connections
+            </Link>
+          )}
+        </div>
       </div>
 
       {hasBooks ? (

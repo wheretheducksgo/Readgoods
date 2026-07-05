@@ -12,6 +12,7 @@ import YearInReview from './pages/YearInReview'
 import LibraryGraph from './pages/LibraryGraph'
 import BookClub from './pages/BookClub'
 import Auth from './pages/Auth'
+import Import from './pages/Import'
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/club/new" element={<BookClub />} />
           <Route path="/club/:id" element={<BookClub />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/import" element={<Import />} />
         </Routes>
       </Layout>
     </BrowserRouter>
