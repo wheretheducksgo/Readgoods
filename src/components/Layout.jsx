@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Search, Home, Library, Users } from 'lucide-react'
+import { BookOpen, Search, Home, Library, Users, BarChart2 } from 'lucide-react'
 import UserMenu from './UserMenu'
 import { c } from '../lib/theme'
 
@@ -7,6 +7,7 @@ const nav = [
   { to: '/', label: 'Home', icon: Home },
   { to: '/library', label: 'Library', icon: Library },
   { to: '/search', label: 'Discover', icon: Search },
+  { to: '/analytics', label: 'Analytics', icon: BarChart2 },
   { to: '/club/new', label: 'Book Club', icon: Users },
 ]
 
