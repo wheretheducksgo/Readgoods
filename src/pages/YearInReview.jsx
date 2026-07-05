@@ -88,7 +88,7 @@ export default function YearInReview() {
 
       setData({ readBooks, totalPages, topGenre, topAuthor, longest, shortest, topRated, loggedPages, byMonth })
     })
-  }, [authLoading, user?.id, year])
+  }, [authLoading, user?.id ?? null, year])
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
   const maxMonth = data ? Math.max(...data.byMonth, 1) : 1

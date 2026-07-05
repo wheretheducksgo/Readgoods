@@ -153,7 +153,7 @@ export default function Library() {
   useEffect(() => {
     if (authLoading) return
     getShelves().then(setShelves)
-  }, [authLoading, user?.id])
+  }, [authLoading, user?.id ?? null])
 
   const total = Object.values(shelves).flat().length
   const hasBooks = total > 0

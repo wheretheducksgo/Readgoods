@@ -300,7 +300,7 @@ export default function Home() {
         setLoadingGenres(false)
       })()
     }) // end Promise.all
-  }, [authLoading, user?.id])
+  }, [authLoading, user?.id ?? null])
 
   const counts = {
     'currently-reading': shelves['currently-reading']?.length || 0,
