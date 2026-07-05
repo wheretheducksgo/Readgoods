@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, setUserId } from '../lib/supabase'
 
 const AuthContext = createContext(null)
 
@@ -62,6 +62,13 @@ async function migrateLocalStorage(userId) {
       if (rows.length) await supabase.from('goals').upsert(rows, { onConflict: 'user_id,year', ignoreDuplicates: true })
     }
 
+    // Clear localStorage data now that it's safely in Supabase
+    localStorage.removeItem('readgoods_shelves')
+    localStorage.removeItem('readgoods_notes')
+    localStorage.removeItem('readgoods_highlights')
+    localStorage.removeItem('readgoods_moods')
+    localStorage.removeItem('readgoods_reading_log')
+    localStorage.removeItem('readgoods_goals')
     localStorage.setItem(migKey, '1')
   } catch (e) {
     console.warn('Migration error:', e)
@@ -74,12 +81,15 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user || null)
+      const u = session?.user || null
+      setUserId(u?.id || null)
+      setUser(u)
       setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const u = session?.user || null
+      setUserId(u?.id || null)
       setUser(u)
       if (event === 'SIGNED_IN' && u) {
         await migrateLocalStorage(u.id)

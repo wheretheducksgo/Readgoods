@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { BookOpen, Star, Calendar, Zap, ArrowLeft, Trophy } from 'lucide-react'
 import { getShelves } from '../lib/shelves'
 import { getLog } from '../lib/readingLog'
+import { useAuth } from '../context/AuthContext'
 import { c } from '../lib/theme'
 
 function statCard(label, value, sub) {
@@ -39,11 +40,13 @@ function statCard(label, value, sub) {
 }
 
 export default function YearInReview() {
+  const { user, loading: authLoading } = useAuth()
   const { year: paramYear } = useParams()
   const year = parseInt(paramYear || new Date().getFullYear(), 10)
   const [data, setData] = useState(null)
 
   useEffect(() => {
+    if (authLoading) return
     const start = new Date(year, 0, 1).getTime()
     const end   = new Date(year + 1, 0, 1).getTime()
 
@@ -85,7 +88,7 @@ export default function YearInReview() {
 
       setData({ readBooks, totalPages, topGenre, topAuthor, longest, shortest, topRated, loggedPages, byMonth })
     })
-  }, [year])
+  }, [authLoading, user?.id, year])
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
   const maxMonth = data ? Math.max(...data.byMonth, 1) : 1

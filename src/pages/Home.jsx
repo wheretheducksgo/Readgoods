@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import { BookOpen, Clock, CheckCheck, ArrowRight, Sparkles, TrendingUp, Star, CalendarDays, Quote, Wand2 } from 'lucide-react'
 import { getShelves, getRecentBooks } from '../lib/shelves'
 import { searchBooks } from '../lib/googleBooks'
@@ -222,6 +223,7 @@ function SectionHeader({ title, icon: Icon, to, toLabel = 'See all' }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Home() {
+  const { user, loading: authLoading } = useAuth()
   const [shelves, setShelves] = useState({})
   const [recent, setRecent] = useState([])
   const [newBooks, setNewBooks] = useState([])
@@ -240,6 +242,7 @@ export default function Home() {
   const thisYear = new Date().getFullYear()
 
   useEffect(() => {
+    if (authLoading) return
     Promise.all([getShelves(), getRecentBooks(8), getRandomHighlight()]).then(([sh, recent, quote]) => {
       setShelves(sh)
       setRecent(recent)
@@ -297,7 +300,7 @@ export default function Home() {
         setLoadingGenres(false)
       })()
     }) // end Promise.all
-  }, [])
+  }, [authLoading, user?.id])
 
   const counts = {
     'currently-reading': shelves['currently-reading']?.length || 0,

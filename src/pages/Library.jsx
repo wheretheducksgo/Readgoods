@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, Clock, CheckCheck } from 'lucide-react'
 import { getShelves } from '../lib/shelves'
+import { useAuth } from '../context/AuthContext'
 import { c } from '../lib/theme'
 
 const SHELF_META = {
@@ -146,11 +147,13 @@ function LibrarySection({ shelfId, books }) {
 }
 
 export default function Library() {
+  const { user, loading: authLoading } = useAuth()
   const [shelves, setShelves] = useState({})
 
   useEffect(() => {
+    if (authLoading) return
     getShelves().then(setShelves)
-  }, [])
+  }, [authLoading, user?.id])
 
   const total = Object.values(shelves).flat().length
   const hasBooks = total > 0
