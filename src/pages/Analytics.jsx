@@ -215,7 +215,7 @@ export default function Analytics() {
   const { user, loading: authLoading } = useAuth()
   const [sessions, setSessions] = useState([])
   const [allBooks, setAllBooks] = useState([])
-  const [form, setForm] = useState({ bookId: '', hours: '', minutes: '', pages: '', date: new Date().toISOString().slice(0, 10) })
+  const [form, setForm] = useState({ bookId: '', hours: '', minutes: '', pageFrom: '', pageTo: '', date: new Date().toISOString().slice(0, 10) })
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
@@ -248,11 +248,11 @@ export default function Analytics() {
       bookTitle: book?.title || form.bookId,
       date: form.date,
       minutes: totalMins,
-      pages: parseInt(form.pages, 10) || null,
+      pages: (form.pageFrom && form.pageTo) ? Math.max(0, parseInt(form.pageTo, 10) - parseInt(form.pageFrom, 10)) : null,
     })
     const updated = await getSessions()
     setSessions(updated)
-    setForm(f => ({ ...f, hours: '', minutes: '', pages: '' }))
+    setForm(f => ({ ...f, hours: '', minutes: '', pageFrom: '', pageTo: '' }))
     setSaving(false)
   }
 
@@ -382,15 +382,33 @@ export default function Analytics() {
             </div>
 
             <div>
-              <label style={{ fontSize: '0.75rem', color: c.textMuted, display: 'block', marginBottom: 4 }}>Pages read <span style={{ color: c.textMuted }}>(optional)</span></label>
-              <input
-                type="number"
-                min="1"
-                placeholder="e.g. 32"
-                value={form.pages}
-                onChange={e => setForm(f => ({ ...f, pages: e.target.value }))}
-                style={inputStyle}
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label style={{ fontSize: '0.75rem', color: c.textMuted }}>Pages read <span style={{ color: c.textMuted }}>(optional)</span></label>
+                {form.pageFrom && form.pageTo && parseInt(form.pageTo) > parseInt(form.pageFrom) && (
+                  <span style={{ fontSize: '0.75rem', color: c.accentText }}>
+                    {parseInt(form.pageTo) - parseInt(form.pageFrom)} pages
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="From"
+                  value={form.pageFrom}
+                  onChange={e => setForm(f => ({ ...f, pageFrom: e.target.value }))}
+                  style={{ ...inputStyle, textAlign: 'center' }}
+                />
+                <span style={{ color: c.textMuted, flexShrink: 0 }}>→</span>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="To"
+                  value={form.pageTo}
+                  onChange={e => setForm(f => ({ ...f, pageTo: e.target.value }))}
+                  style={{ ...inputStyle, textAlign: 'center' }}
+                />
+              </div>
             </div>
 
             {formError && <p style={{ fontSize: '0.8rem', color: '#e55' }}>{formError}</p>}
