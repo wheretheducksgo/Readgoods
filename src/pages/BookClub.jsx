@@ -1,9 +1,91 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { Users, BookOpen, ArrowLeft, Copy, Check } from 'lucide-react'
+import { Users, ArrowLeft, Copy, Check, BookOpen, ChevronRight } from 'lucide-react'
 import { c } from '../lib/theme'
 
 const API = ''
+const MY_CLUBS_KEY = 'readgoods_my_clubs'
+
+function getMyClubs() {
+  try { return JSON.parse(localStorage.getItem(MY_CLUBS_KEY) || '[]') } catch { return [] }
+}
+function saveMyClub(club) {
+  const clubs = getMyClubs().filter(c => c.id !== club.id)
+  localStorage.setItem(MY_CLUBS_KEY, JSON.stringify([club, ...clubs]))
+}
+
+// ── Join gate (shown when visiting a club link without a name) ────────────────
+
+function JoinGate({ clubId, onJoin }) {
+  const [name, setName] = useState('')
+  const [club, setClub] = useState(null)
+
+  useEffect(() => {
+    fetch(`${API}/api/club/${clubId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setClub(d))
+      .catch(() => {})
+  }, [clubId])
+
+  function handleJoin(e) {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const url = new URL(window.location.href)
+    url.searchParams.set('name', trimmed)
+    window.history.replaceState({}, '', url.toString())
+    onJoin(trimmed)
+  }
+
+  return (
+    <div className="max-w-md mx-auto px-6 py-16 text-center">
+      {club && (
+        <div className="mb-8">
+          {club.bookCover && (
+            <div className="mx-auto mb-4 rounded-xl overflow-hidden shadow-lg" style={{ width: 80, height: 120 }}>
+              <img src={club.bookCover} alt={club.bookTitle} className="w-full h-full object-cover" />
+            </div>
+          )}
+          <p style={{ fontSize: '0.75rem', color: c.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Book Club</p>
+          <h1 style={{ fontFamily: '"Lora", serif', fontWeight: 700, color: c.textPrimary, fontSize: '1.4rem' }}>
+            {club.bookTitle}
+          </h1>
+          <p style={{ color: c.textSecondary, fontSize: '0.85rem', marginTop: 4 }}>
+            {club.members.length} member{club.members.length !== 1 ? 's' : ''} reading
+          </p>
+        </div>
+      )}
+
+      <div className="rounded-2xl p-6" style={{ backgroundColor: c.surface, border: `1px solid ${c.border}` }}>
+        <h2 style={{ fontFamily: '"Lora", serif', fontWeight: 600, color: c.textPrimary, fontSize: '1.05rem', marginBottom: 4 }}>
+          What's your name?
+        </h2>
+        <p style={{ color: c.textSecondary, fontSize: '0.83rem', marginBottom: 20 }}>
+          This is how your progress will appear to other members.
+        </p>
+        <form onSubmit={handleJoin} className="flex flex-col gap-3">
+          <input
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Your name"
+            autoFocus
+            className="w-full rounded-lg px-4 py-2.5 text-sm outline-none"
+            style={{ backgroundColor: c.surface2, color: c.textPrimary, border: `1px solid ${c.border}` }}
+          />
+          <button
+            type="submit"
+            disabled={!name.trim()}
+            className="w-full rounded-lg py-2.5 text-sm font-medium"
+            style={{ backgroundColor: c.btnPrimary, color: c.btnPrimaryText, cursor: name.trim() ? 'pointer' : 'not-allowed', opacity: name.trim() ? 1 : 0.6 }}
+          >
+            Join club
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 // ── Create club form ──────────────────────────────────────────────────────────
 
@@ -14,6 +96,7 @@ function CreateClub() {
   const [creatorName, setCreatorName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const myClubs = getMyClubs()
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -24,11 +107,20 @@ function CreateClub() {
       const res = await fetch(`${API}/api/club`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookId: Date.now().toString(), bookTitle: bookTitle.trim(), bookCover: bookCover.trim() || null, creatorName: creatorName.trim() }),
+        body: JSON.stringify({
+          bookId: Date.now().toString(),
+          bookTitle: bookTitle.trim(),
+          bookCover: bookCover.trim() || null,
+          creatorName: creatorName.trim(),
+        }),
       })
       const data = await res.json()
-      if (data.clubId) navigate(`/club/${data.clubId}?name=${encodeURIComponent(creatorName.trim())}`)
-      else setError('Could not create club.')
+      if (data.clubId) {
+        saveMyClub({ id: data.clubId, bookTitle: bookTitle.trim(), bookCover: bookCover.trim() || null, createdAt: Date.now() })
+        navigate(`/club/${data.clubId}?name=${encodeURIComponent(creatorName.trim())}`)
+      } else {
+        setError('Could not create club.')
+      }
     } catch {
       setError('Server not available.')
     } finally {
@@ -36,66 +128,101 @@ function CreateClub() {
     }
   }
 
+  const inputStyle = {
+    backgroundColor: c.surface2,
+    color: c.textPrimary,
+    border: `1px solid ${c.border}`,
+    borderRadius: 8,
+    padding: '10px 14px',
+    fontSize: '0.875rem',
+    outline: 'none',
+    width: '100%',
+  }
+
   return (
     <div className="max-w-lg mx-auto px-6 py-10">
       <Link to="/" className="inline-flex items-center gap-2 text-sm mb-8" style={{ color: c.textSecondary }}>
         <ArrowLeft size={14} /> Home
       </Link>
+
       <h1 style={{ fontFamily: '"Lora", serif', fontSize: '1.6rem', fontWeight: 700, color: c.textPrimary, marginBottom: 6 }}>
-        Start a Book Club
+        Book Club
       </h1>
       <p style={{ color: c.textSecondary, fontSize: '0.9rem', marginBottom: 28 }}>
-        Share the link with friends — everyone tracks their progress together.
+        Start a club and share the link — everyone tracks progress together.
       </p>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div>
-          <label style={{ fontSize: '0.8rem', color: c.textSecondary, display: 'block', marginBottom: 6 }}>Book title *</label>
-          <input
-            type="text"
-            value={bookTitle}
-            onChange={e => setBookTitle(e.target.value)}
-            placeholder="e.g. The Name of the Wind"
-            required
-            className="w-full rounded-lg px-4 py-2.5 text-sm outline-none"
-            style={{ backgroundColor: c.surface, color: c.textPrimary, border: `1px solid ${c.border}` }}
-          />
-        </div>
-        <div>
-          <label style={{ fontSize: '0.8rem', color: c.textSecondary, display: 'block', marginBottom: 6 }}>Cover image URL (optional)</label>
-          <input
-            type="url"
-            value={bookCover}
-            onChange={e => setBookCover(e.target.value)}
-            placeholder="https://..."
-            className="w-full rounded-lg px-4 py-2.5 text-sm outline-none"
-            style={{ backgroundColor: c.surface, color: c.textPrimary, border: `1px solid ${c.border}` }}
-          />
-        </div>
-        <div>
-          <label style={{ fontSize: '0.8rem', color: c.textSecondary, display: 'block', marginBottom: 6 }}>Your name *</label>
-          <input
-            type="text"
-            value={creatorName}
-            onChange={e => setCreatorName(e.target.value)}
-            placeholder="e.g. Alex"
-            required
-            className="w-full rounded-lg px-4 py-2.5 text-sm outline-none"
-            style={{ backgroundColor: c.surface, color: c.textPrimary, border: `1px solid ${c.border}` }}
-          />
-        </div>
-        {error && <p style={{ color: '#e55', fontSize: '0.83rem' }}>{error}</p>}
-        <button
-          type="submit"
-          disabled={loading}
-          className="rounded-lg py-2.5 text-sm font-medium"
-          style={{ backgroundColor: c.btnPrimary, color: c.btnPrimaryText, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}
-        >
-          {loading ? 'Creating…' : 'Create Club'}
-        </button>
-      </form>
 
-      <div className="mt-8 pt-6" style={{ borderTop: `1px solid ${c.border}` }}>
-        <p style={{ color: c.textSecondary, fontSize: '0.85rem', marginBottom: 10 }}>Already have a club code?</p>
+      {/* My clubs */}
+      {myClubs.length > 0 && (
+        <div className="rounded-xl mb-8 overflow-hidden" style={{ border: `1px solid ${c.border}`, backgroundColor: c.surface }}>
+          <div className="px-4 py-3" style={{ borderBottom: `1px solid ${c.border}` }}>
+            <h2 style={{ fontFamily: '"Lora", serif', fontWeight: 600, color: c.textPrimary, fontSize: '0.95rem' }}>
+              My clubs
+            </h2>
+          </div>
+          <div>
+            {myClubs.map(club => (
+              <Link
+                key={club.id}
+                to={`/club/${club.id}`}
+                className="flex items-center gap-3 px-4 py-3 group"
+                style={{ borderBottom: `1px solid ${c.borderSoft}`, textDecoration: 'none' }}
+              >
+                {club.bookCover ? (
+                  <div className="rounded overflow-hidden flex-shrink-0" style={{ width: 32, height: 48 }}>
+                    <img src={club.bookCover} alt={club.bookTitle} className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="rounded flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 48, backgroundColor: c.surface2 }}>
+                    <BookOpen size={14} style={{ color: c.textMuted }} />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: c.textPrimary }}>{club.bookTitle}</p>
+                  <p className="text-xs font-mono mt-0.5" style={{ color: c.textMuted, letterSpacing: '0.08em' }}>{club.id}</p>
+                </div>
+                <ChevronRight size={14} style={{ color: c.textMuted, flexShrink: 0 }} />
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Create form */}
+      <div className="rounded-xl p-5 mb-6" style={{ border: `1px solid ${c.border}`, backgroundColor: c.surface }}>
+        <h2 style={{ fontFamily: '"Lora", serif', fontWeight: 600, color: c.textPrimary, fontSize: '0.95rem', marginBottom: 16 }}>
+          Start a new club
+        </h2>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div>
+            <label style={{ fontSize: '0.78rem', color: c.textSecondary, display: 'block', marginBottom: 6 }}>Book title *</label>
+            <input type="text" value={bookTitle} onChange={e => setBookTitle(e.target.value)} placeholder="e.g. The Name of the Wind" required style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: '0.78rem', color: c.textSecondary, display: 'block', marginBottom: 6 }}>Cover image URL (optional)</label>
+            <input type="url" value={bookCover} onChange={e => setBookCover(e.target.value)} placeholder="https://…" style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: '0.78rem', color: c.textSecondary, display: 'block', marginBottom: 6 }}>Your name *</label>
+            <input type="text" value={creatorName} onChange={e => setCreatorName(e.target.value)} placeholder="e.g. Alex" required style={inputStyle} />
+          </div>
+          {error && <p style={{ color: '#e55', fontSize: '0.83rem' }}>{error}</p>}
+          <button
+            type="submit"
+            disabled={loading}
+            className="rounded-lg py-2.5 text-sm font-medium"
+            style={{ backgroundColor: c.btnPrimary, color: c.btnPrimaryText, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, border: 'none' }}
+          >
+            {loading ? 'Creating…' : 'Create Club'}
+          </button>
+        </form>
+      </div>
+
+      {/* Join by code */}
+      <div className="rounded-xl p-5" style={{ border: `1px solid ${c.border}`, backgroundColor: c.surface }}>
+        <h2 style={{ fontFamily: '"Lora", serif', fontWeight: 600, color: c.textPrimary, fontSize: '0.95rem', marginBottom: 12 }}>
+          Join with a code
+        </h2>
         <JoinByCode />
       </div>
     </div>
@@ -121,14 +248,14 @@ function JoinByCode() {
         placeholder="Club code"
         maxLength={6}
         className="rounded-lg px-3 py-2 text-sm outline-none w-28 uppercase"
-        style={{ backgroundColor: c.surface, color: c.textPrimary, border: `1px solid ${c.border}`, letterSpacing: '0.1em' }}
+        style={{ backgroundColor: c.surface2, color: c.textPrimary, border: `1px solid ${c.border}`, letterSpacing: '0.1em' }}
       />
       <input
         value={name}
         onChange={e => setName(e.target.value)}
         placeholder="Your name"
         className="rounded-lg px-3 py-2 text-sm outline-none flex-1"
-        style={{ backgroundColor: c.surface, color: c.textPrimary, border: `1px solid ${c.border}` }}
+        style={{ backgroundColor: c.surface2, color: c.textPrimary, border: `1px solid ${c.border}` }}
       />
       <button
         type="submit"
@@ -180,7 +307,8 @@ function ClubView({ clubId, memberName }) {
   }
 
   function copyLink() {
-    navigator.clipboard.writeText(window.location.href).then(() => {
+    const inviteUrl = `${window.location.origin}/club/${clubId}`
+    navigator.clipboard.writeText(inviteUrl).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1800)
     })
@@ -202,8 +330,8 @@ function ClubView({ clubId, memberName }) {
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-10">
-      <Link to="/" className="inline-flex items-center gap-2 text-sm mb-8" style={{ color: c.textSecondary }}>
-        <ArrowLeft size={14} /> Home
+      <Link to="/club/new" className="inline-flex items-center gap-2 text-sm mb-8" style={{ color: c.textSecondary }}>
+        <ArrowLeft size={14} /> My Clubs
       </Link>
 
       {/* Header */}
@@ -244,11 +372,11 @@ function ClubView({ clubId, memberName }) {
           </h2>
         </div>
         {club.members.length === 0 ? (
-          <p className="px-5 py-4 text-sm" style={{ color: c.textMuted }}>No members yet.</p>
+          <p className="px-5 py-4 text-sm" style={{ color: c.textMuted }}>No members yet. Share the invite link to get started.</p>
         ) : (
-          <div className="divide-y" style={{ borderColor: c.border }}>
-            {club.members.map(m => (
-              <div key={m.name} className="px-5 py-4">
+          <div>
+            {club.members.map((m, i) => (
+              <div key={m.name} className="px-5 py-4" style={{ borderTop: i > 0 ? `1px solid ${c.border}` : 'none' }}>
                 <div className="flex items-center justify-between mb-1">
                   <span style={{ fontWeight: 600, color: c.textPrimary, fontSize: '0.9rem' }}>
                     {m.name}
@@ -303,7 +431,7 @@ function ClubView({ clubId, memberName }) {
             type="submit"
             disabled={saving}
             className="self-start px-5 py-2 rounded-lg text-sm font-medium"
-            style={{ backgroundColor: c.btnPrimary, color: c.btnPrimaryText, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
+            style={{ backgroundColor: c.btnPrimary, color: c.btnPrimaryText, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, border: 'none' }}
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
@@ -318,8 +446,9 @@ function ClubView({ clubId, memberName }) {
 export default function BookClub() {
   const { id } = useParams()
   const [searchParams] = useState(() => new URLSearchParams(window.location.search))
-  const memberName = searchParams.get('name') || ''
+  const [memberName, setMemberName] = useState(searchParams.get('name') || '')
 
   if (!id) return <CreateClub />
+  if (!memberName) return <JoinGate clubId={id.toUpperCase()} onJoin={setMemberName} />
   return <ClubView clubId={id.toUpperCase()} memberName={memberName} />
 }
