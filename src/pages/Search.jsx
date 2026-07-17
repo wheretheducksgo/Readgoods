@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Search as SearchIcon, X, Star, ChevronDown, ChevronUp } from 'lucide-react'
 import BookCard from '../components/BookCard'
-import { searchBooks, GENRES as ALL_GENRES, getPopularBooks } from '../lib/localBooks'
+import { searchBooks, GENRES as ALL_GENRES, getPopularBooks, getBooksByGenre } from '../lib/localBooks'
 import { c } from '../lib/theme'
 
 const GENRES = ALL_GENRES.map(g => ({ label: g, q: g }))
@@ -65,11 +65,11 @@ function RadioButton({ checked, onChange, children }) {
 
 function runLocalSearch(q, genreLabel, minRating, sortBy) {
   const { books: textResults } = q.trim()
-    ? searchBooks(q.trim())
+    ? searchBooks(q.trim(), { maxResults: 1000 })
     : { books: [] }
 
   const genreResults = genreLabel
-    ? searchBooks(genreLabel).books
+    ? getBooksByGenre(genreLabel, { maxResults: 1000 })
     : []
 
   let books
@@ -79,9 +79,9 @@ function runLocalSearch(q, genreLabel, minRating, sortBy) {
   } else if (genreLabel) {
     books = genreResults
   } else if (q.trim()) {
-    books = textResults
+    books = searchBooks(q.trim(), { maxResults: 1000 }).books
   } else {
-    books = getPopularBooks({ maxResults: 100 })
+    books = getPopularBooks({ maxResults: 1000 })
   }
 
   if (minRating > 0) books = books.filter(b => (b.averageRating || 0) >= minRating)
@@ -95,7 +95,7 @@ function runLocalSearch(q, genreLabel, minRating, sortBy) {
   return books
 }
 
-const PAGE_SIZE = 60
+const PAGE_SIZE = 25
 
 export default function Search() {
   const location = useLocation()
