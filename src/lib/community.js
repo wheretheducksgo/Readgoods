@@ -1,13 +1,34 @@
 import { supabase } from './supabase'
+import { SEED_TAGS } from '../data/seedTags'
+import { BOOKS, BOOK_BY_ID } from '../data/books'
+
+// Build a lookup of local books for community display
+const LOCAL_BOOK_CACHE = BOOKS.map(b => ({
+  book_id: b.id,
+  title: b.title,
+  author: b.authors?.[0] || '',
+  cover: b.cover || null,
+}))
 
 export async function getCommunityBooks({ query = '', tags = [], minRating = 0 } = {}) {
-  let cacheQuery = supabase.from('book_cache').select('*')
-  if (query) cacheQuery = cacheQuery.or(`title.ilike.%${query}%,author.ilike.%${query}%`)
+  // Merge local books with any that have been cached in Supabase
+  const { data: cachedBooks } = await supabase.from('book_cache').select('*')
+  const cachedIds = new Set((cachedBooks || []).map(b => b.book_id))
 
-  const { data: books, error } = await cacheQuery
-  if (error || !books?.length) return []
+  // Use local books as base; overlay any Supabase-cached metadata
+  let allBooks = LOCAL_BOOK_CACHE.map(lb => {
+    const cached = (cachedBooks || []).find(c => c.book_id === lb.book_id)
+    return cached || lb
+  })
 
-  const bookIds = books.map(b => b.book_id)
+  if (query) {
+    const q = query.toLowerCase()
+    allBooks = allBooks.filter(b =>
+      b.title?.toLowerCase().includes(q) || b.author?.toLowerCase().includes(q)
+    )
+  }
+
+  const bookIds = allBooks.map(b => b.book_id)
 
   const [{ data: ratings }, { data: moods }] = await Promise.all([
     supabase.from('ratings').select('book_id, rating, review').in('book_id', bookIds),
@@ -26,9 +47,12 @@ export async function getCommunityBooks({ query = '', tags = [], minRating = 0 }
     for (const tag of m.moods || []) moodsByBook[m.book_id].add(tag)
   }
 
-  let results = books.map(book => {
+  let results = allBooks.map(book => {
     const bookRatings = ratingsByBook[book.book_id] || []
-    const bookMoods = [...(moodsByBook[book.book_id] || [])]
+    // Merge seed tags with real user tags
+    const seedMoods = SEED_TAGS[book.book_id] || []
+    const userMoods = moodsByBook[book.book_id] || new Set()
+    const bookMoods = [...new Set([...seedMoods, ...userMoods])]
     const ratingCount = bookRatings.length
     const avgRating = ratingCount > 0
       ? bookRatings.reduce((s, r) => s + r.rating, 0) / ratingCount
@@ -46,6 +70,9 @@ export async function getCommunityBooks({ query = '', tags = [], minRating = 0 }
 export async function getAllCommunityTags() {
   const { data } = await supabase.from('moods').select('moods')
   const all = new Set()
+  // Include all seed tags
+  for (const tags of Object.values(SEED_TAGS)) for (const t of tags) all.add(t)
+  // Merge real user tags
   for (const row of data || []) for (const tag of row.moods || []) all.add(tag)
   return [...all].sort()
 }
