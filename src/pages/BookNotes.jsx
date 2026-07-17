@@ -168,11 +168,21 @@ export default function BookNotes() {
 
       {book && (
         <div className="flex gap-5 mb-8">
-          {book.cover && (
-            <div className="rounded-lg overflow-hidden flex-shrink-0 shadow-md" style={{ width: 64, height: 96, backgroundColor: c.surface2 }}>
+          <div className="rounded-lg overflow-hidden flex-shrink-0 shadow-md" style={{ width: 64, height: 96, backgroundColor: c.surface2 }}>
+            {book.cover ? (
               <img src={book.cover} alt={book.title} className="w-full h-full object-cover" />
-            </div>
-          )}
+            ) : (
+              <div className="w-full h-full flex items-end p-2" style={{
+                background: book.coverHue != null
+                  ? `linear-gradient(150deg, hsl(${book.coverHue},35%,22%) 0%, hsl(${book.coverHue},50%,14%) 100%)`
+                  : `linear-gradient(135deg, ${c.surface2}, ${c.surface})`,
+              }}>
+                <span style={{ fontSize: '0.55rem', color: `hsl(${book.coverHue ?? 220},60%,75%)`, fontFamily: '"Lora", serif', lineHeight: 1.3 }}>
+                  {book.title}
+                </span>
+              </div>
+            )}
+          </div>
           <div className="min-w-0">
             <h1 style={{ fontFamily: '"Lora", serif', fontSize: '1.4rem', fontWeight: 700, color: c.textPrimary, lineHeight: 1.25, marginBottom: 4 }}>
               {book.title}

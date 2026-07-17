@@ -1,6 +1,6 @@
 import { getShelves, addToShelf } from './shelves'
 import { setBookRating } from './ratings'
-import { searchBooks } from './localBooks'
+import { searchBooks, BOOKS } from './localBooks'
 
 const SHELF_TO_GOODREADS = {
   'read': 'read',
@@ -31,7 +31,7 @@ export async function exportCSV() {
         'Year Published': book.publishedDate?.slice(0, 4) || '',
         Publisher: book.publisher || '',
         'Avg Rating': book.averageRating || '',
-        'Google Books ID': book.id || '',
+        'Book ID': book.id || '',
       })
     }
   }
@@ -118,35 +118,27 @@ export function parseImportFile(text) {
 
 // ── Import execution ──────────────────────────────────────────────────────────
 
-async function lookupBook(row) {
-  // Try ISBN first (most accurate)
+function lookupBook(row) {
+  // Try ISBN first (most accurate) — direct match against local book list
   if (row.isbn) {
-    try {
-      const res = await searchBooks(`isbn:${row.isbn}`, { maxResults: 1 })
-      if (res.books[0]) return res.books[0]
-    } catch {}
+    const byIsbn = BOOKS.find(b => b.isbn === row.isbn)
+    if (byIsbn) return byIsbn
   }
-  // Fall back to title + author
-  try {
-    const q = row.author
-      ? `intitle:"${row.title}" inauthor:"${row.author}"`
-      : `intitle:"${row.title}"`
-    const res = await searchBooks(q, { maxResults: 1 })
-    if (res.books[0]) return res.books[0]
-  } catch {}
-  return null
+  // Fall back to plain text search by title + author
+  const q = row.title + (row.author ? ' ' + row.author : '')
+  const { books } = searchBooks(q.trim(), { maxResults: 1 })
+  return books[0] || null
 }
 
 // onProgress(current, total, status) — called as each book is processed
 export async function importBooks(rows, onProgress) {
   const results = { imported: 0, skipped: 0, failed: 0 }
-  const delay = ms => new Promise(r => setTimeout(r, ms))
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
     onProgress(i + 1, rows.length, `Looking up "${row.title}"…`)
     try {
-      const book = await lookupBook(row)
+      const book = lookupBook(row)
       if (book) {
         await addToShelf(row.shelf, book)
         if (row.rating) await setBookRating(book.id, row.rating)
@@ -157,8 +149,6 @@ export async function importBooks(rows, onProgress) {
     } catch {
       results.failed++
     }
-    // Respect Google Books rate limit (~1 req/sec)
-    if (i < rows.length - 1) await delay(300)
   }
 
   return results

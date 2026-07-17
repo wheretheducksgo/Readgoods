@@ -87,7 +87,7 @@ export default function Import() {
           Import from CSV
         </h2>
         <p style={{ color: c.textSecondary, fontSize: '0.85rem', marginBottom: 16 }}>
-          Supports Goodreads exports and Readgoods CSV files. Each book will be looked up on Google Books — this may take a few minutes for large libraries.
+          Supports Goodreads exports and Readgoods CSV files. Each book will be matched against the Readgoods local book database.
         </p>
 
         {step === 'idle' && (
@@ -209,7 +209,7 @@ export default function Import() {
                 <div className="flex items-center gap-3">
                   <XCircle size={18} style={{ color: '#e55' }} />
                   <span style={{ color: c.textSecondary, fontSize: '0.9rem' }}>
-                    <strong>{results.failed}</strong> couldn't be found on Google Books
+                    <strong>{results.failed}</strong> couldn't be matched in the local database
                   </span>
                 </div>
               )}
