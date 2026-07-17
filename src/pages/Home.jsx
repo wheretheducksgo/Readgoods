@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { BookOpen, Clock, CheckCheck, ArrowRight, Sparkles, TrendingUp, Star, CalendarDays, Quote, Wand2 } from 'lucide-react'
 import { getShelves, getRecentBooks } from '../lib/shelves'
-import { searchBooks } from '../lib/googleBooks'
 import { getRandomHighlight } from '../lib/highlights'
 import { getAllNotes } from '../lib/notes'
+import { getNewBooks, getPopularBooks, getBooksByGenre, shuffled, GENRES, BOOKS } from '../lib/localBooks'
 import GoalRing from '../components/GoalRing'
 import { c } from '../lib/theme'
 
@@ -15,130 +15,20 @@ const SHELF_META = {
   'read':              { label: 'Read',               icon: CheckCheck },
 }
 
-const ALL_GENRES = [
-  { label: 'Fantasy & Magic',       query: 'subject:fantasy',                  searchQ: 'subject:fantasy' },
-  { label: 'Mystery & Thriller',    query: 'subject:mystery',                  searchQ: 'subject:mystery' },
-  { label: 'Science Fiction',       query: 'subject:science fiction',          searchQ: 'subject:science fiction' },
-  { label: 'Historical Fiction',    query: 'subject:historical fiction',       searchQ: 'subject:historical fiction' },
-  { label: 'Romance',               query: 'subject:romance',                  searchQ: 'subject:romance' },
-  { label: 'Horror',                query: 'subject:horror',                   searchQ: 'subject:horror' },
-  { label: 'Biography & Memoir',    query: 'subject:biography',               searchQ: 'subject:biography' },
-  { label: 'True Crime',            query: 'true crime murder investigation',  searchQ: 'true crime' },
-  { label: 'Graphic Novels',        query: 'subject:comics graphic novel',     searchQ: 'subject:comics' },
-  { label: 'Short Stories',         query: 'subject:fiction short stories anthology', searchQ: 'subject:short stories' },
-  { label: 'Poetry',                query: 'subject:poetry',                   searchQ: 'subject:poetry' },
-  { label: 'Adventure',             query: 'subject:adventure',                searchQ: 'subject:adventure' },
-  { label: 'Self-Help',             query: 'subject:self-help personal development', searchQ: 'subject:self-help' },
-  { label: 'Travel',                query: 'subject:travel writing',           searchQ: 'subject:travel' },
-]
-
-function pickGenres(n = 4) {
-  const shuffled = [...ALL_GENRES].sort(() => Math.random() - 0.5)
-  return shuffled.slice(0, n)
-}
-
-// Deduplicate books by id
-function dedup(books) {
-  const seen = new Set()
-  return books.filter(b => !seen.has(b.id) && seen.add(b.id))
-}
-
 function pickRandom(arr, n) {
-  return [...arr].sort(() => Math.random() - 0.5).slice(0, n)
+  return shuffled(arr).slice(0, n)
 }
 
-// localStorage cache with 2-hour TTL for API results
-const CACHE_TTL = 24 * 60 * 60 * 1000
-function scGet(key) {
-  try {
-    const v = localStorage.getItem(`hc:${key}`)
-    if (!v) return null
-    const { data, exp } = JSON.parse(v)
-    if (Date.now() > exp) { localStorage.removeItem(`hc:${key}`); return null }
-    return data
-  } catch { return null }
-}
-function scSet(key, data) {
-  try { localStorage.setItem(`hc:${key}`, JSON.stringify({ data, exp: Date.now() + CACHE_TTL })) } catch {}
-}
-
-async function fetchNew() {
-  const cached = scGet('home:new')
-  if (cached) return pickRandom(cached, 14)
-
-  const results = await Promise.allSettled([
-    searchBooks('subject:thriller', { maxResults: 30, orderBy: 'newest' }),
-    searchBooks('subject:"contemporary fiction"', { maxResults: 30, orderBy: 'newest' }),
-  ])
-  const all = results.flatMap(r => r.status === 'fulfilled' ? r.value.books : [])
-  const REPRINT = /\b(illustrated|annotated|unabridged|abridged|classics?( edition)?|collector'?s|complete works?|definitive edition|library edition|retold|adapted)\b/i
-  const deduped = dedup(all)
-  const pool = deduped.filter(b => {
-    const year = parseInt(b.publishedDate?.slice(0, 4), 10)
-    return !isNaN(year) && year >= 2022 && !REPRINT.test(b.title)
-  })
-  // Fall back to unfiltered if the strict filter removes everything
-  const final = (pool.length >= 7 ? pool : deduped).slice(0, 60)
-  if (final.length) scSet('home:new', final)
-  return pickRandom(final, 14)
-}
-
-async function fetchPopular() {
-  const cached = scGet('home:popular')
-  if (cached) { return pickRandom(cached, 14) }
-
-  const [r1, r2] = await Promise.allSettled([
-    searchBooks('subject:fiction', { maxResults: 40 }),
-    searchBooks('subject:fiction', { maxResults: 40, startIndex: 40 }),
-  ])
-  const all = [
-    ...(r1.status === 'fulfilled' ? r1.value.books : []),
-    ...(r2.status === 'fulfilled' ? r2.value.books : []),
-  ]
-  const pool = dedup(all)
-    .sort((a, b) => (b.averageRating || 0) - (a.averageRating || 0))
-    .slice(0, 60)
-  if (pool.length) scSet('home:popular', pool)
-  return pickRandom(pool, 14)
-}
-
-async function fetchForYou(libraryBooks) {
+function getForYou(libraryBooks) {
   if (!libraryBooks.length) return null
-
-  const cacheKey = `home:foryou:${libraryBooks.map(b => b.id).sort().join(',')}`
-  const cached = scGet(cacheKey)
-  if (cached) return pickRandom(cached, 14)
-
   const libraryIds = new Set(libraryBooks.map(b => b.id))
-  const catCounts = {}, authCounts = {}
+  const catCounts = {}
   for (const b of libraryBooks) {
     for (const cat of (b.categories || [])) catCounts[cat] = (catCounts[cat] || 0) + 1
-    const auth = b.authors?.[0]
-    if (auth) authCounts[auth] = (authCounts[auth] || 0) + 1
   }
-  // Limit to top 2 categories + top 1 author to keep calls low
-  const topCats = Object.entries(catCounts).sort((a, b) => b[1] - a[1]).slice(0, 2).map(e => e[0])
-  const topAuth = Object.entries(authCounts).sort((a, b) => b[1] - a[1])[0]?.[0]
-
-  const queries = [
-    ...topCats.map(cat => searchBooks(`subject:"${cat}"`, { maxResults: 20 })),
-    ...(topAuth ? [searchBooks(`inauthor:"${topAuth}"`, { maxResults: 20 })] : []),
-  ]
-  const results = await Promise.allSettled(queries)
-  const all = results.flatMap(r => r.status === 'fulfilled' ? r.value.books : [])
-  const pool = dedup(all).filter(b => !libraryIds.has(b.id))
-  if (pool.length) scSet(cacheKey, pool)
-  return pool.length ? pickRandom(pool, 14) : null
-}
-
-async function fetchGenre(query) {
-  const cached = scGet(`home:genre:${query}`)
-  if (cached) return pickRandom(cached, 14)
-
-  const { books } = await searchBooks(query, { maxResults: 40 })
-  const pool = dedup(books)
-  if (pool.length) scSet(`home:genre:${query}`, pool)
-  return pool.slice(0, 14)
+  const topCats = Object.entries(catCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0])
+  const pool = BOOKS.filter(b => !libraryIds.has(b.id) && topCats.some(c => b.categories.includes(c)))
+  return pool.length ? pickRandom(pool, 14) : pickRandom(BOOKS.filter(b => !libraryIds.has(b.id)), 14)
 }
 
 // ── Horizontal book strip ─────────────────────────────────────────────────────
@@ -182,8 +72,12 @@ function BookStrip({ books, loading }) {
             {book.cover ? (
               <img src={book.cover} alt={book.title} width={COVER_W} height={COVER_H} className="w-full h-full object-cover" loading="lazy" />
             ) : (
-              <div className="w-full h-full flex items-end p-2" style={{ background: `linear-gradient(135deg, ${c.surface2}, ${c.surface})` }}>
-                <span className="text-xs leading-tight" style={{ color: c.accentText, fontFamily: '"Lora", serif' }}>{book.title}</span>
+              <div className="w-full h-full flex items-end p-2" style={{
+                background: book.coverHue != null
+                  ? `linear-gradient(150deg, hsl(${book.coverHue},35%,22%) 0%, hsl(${book.coverHue},50%,14%) 100%)`
+                  : `linear-gradient(135deg, ${c.surface2}, ${c.surface})`,
+              }}>
+                <span className="text-xs leading-tight" style={{ color: `hsl(${book.coverHue ?? 220},60%,75%)`, fontFamily: '"Lora", serif' }}>{book.title}</span>
               </div>
             )}
           </div>
@@ -225,16 +119,11 @@ function SectionHeader({ title, icon: Icon, to, toLabel = 'See all' }) {
 export default function Home() {
   const { user, loading: authLoading } = useAuth()
   const [shelves, setShelves] = useState({})
-  const [recent, setRecent] = useState([])
+  const [recent, setRecent] = useState([]) // eslint-disable-line no-unused-vars
   const [newBooks, setNewBooks] = useState([])
   const [recommended, setRecommended] = useState([])
   const [forYou, setForYou] = useState(null)
-  const [genres, setGenres] = useState(() => Array.from({ length: 4 }, () => []))
-  const [selectedGenres] = useState(() => pickGenres(4))
-  const [loadingNew, setLoadingNew] = useState(true)
-  const [loadingRec, setLoadingRec] = useState(true)
-  const [loadingForYou, setLoadingForYou] = useState(true)
-  const [loadingGenres, setLoadingGenres] = useState(true)
+  const [genres, setGenres] = useState([])
   const [randomQuote, setRandomQuote] = useState(null)
   const [aiRec, setAiRec] = useState(null)
   const [aiRecFailed, setAiRecFailed] = useState(false)
@@ -243,63 +132,54 @@ export default function Home() {
 
   useEffect(() => {
     if (authLoading) return
+    let mounted = true
     Promise.all([getShelves(), getRecentBooks(8), getRandomHighlight()]).then(([sh, recent, quote]) => {
+      if (!mounted) return
       setShelves(sh)
       setRecent(recent)
       setRandomQuote(quote)
 
       const libraryBooks = Object.values(sh).flat()
 
+      // Populate all sections from local data — synchronous, no API needed
+      setNewBooks(pickRandom(getNewBooks({ maxResults: 40, minYear: 2022 }), 14))
+      setRecommended(pickRandom(getPopularBooks({ maxResults: 40 }), 14))
+      setForYou(getForYou(libraryBooks))
+
+      // Pick 4 random genres and populate each with 14 books
+      const picked = shuffled(GENRES).slice(0, 4)
+      setGenres(picked.map(label => ({
+        genre: { label, searchQ: label },
+        books: pickRandom(getBooksByGenre(label), 14),
+      })))
+
       // Fire off AI recommendation in parallel (won't block page sections)
       if (libraryBooks.length > 0) {
         setLoadingAiRec(true)
-        getAllNotes().then(notesList => {
+        getAllNotes().catch(() => []).then(notesList => {
+          if (!mounted) return
           const notesWithTitles = notesList.map(n => {
             const book = libraryBooks.find(b => b.id === n.bookId)
             return book ? { title: book.title, note: n.text } : null
           }).filter(Boolean)
-      fetch('/api/ai-recommend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            library: libraryBooks.map(b => ({ title: b.title, authors: b.authors, categories: b.categories })),
-            notes: notesWithTitles,
-          }),
+          try {
+            fetch('/api/ai-recommend', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                library: libraryBooks.map(b => ({ title: b.title, authors: b.authors, categories: b.categories })),
+                notes: notesWithTitles,
+              }),
+            })
+              .then(r => r.json())
+              .then(data => { if (!mounted) return; if (data.recommendation) setAiRec(data.recommendation); else setAiRecFailed(true) })
+              .catch(() => { if (mounted) setAiRecFailed(true) })
+              .finally(() => { if (mounted) setLoadingAiRec(false) })
+          } catch { if (mounted) { setAiRecFailed(true); setLoadingAiRec(false) } }
         })
-          .then(r => r.json())
-          .then(data => { if (data.recommendation) setAiRec(data.recommendation); else setAiRecFailed(true) })
-          .catch(() => setAiRecFailed(true))
-          .finally(() => setLoadingAiRec(false))
-        }) // end getAllNotes
       }
-
-      // Load sections serially. Only pause between sections when an API call is needed
-      const delay = ms => new Promise(r => setTimeout(r, ms))
-      const needsDelay = key => !scGet(key)
-
-      ;(async () => {
-        try { setRecommended(await fetchPopular()) } catch {}
-        setLoadingRec(false)
-
-        if (needsDelay('home:new')) await delay(800)
-        try { setNewBooks(await fetchNew()) } catch {}
-        setLoadingNew(false)
-
-        const fyKey = `home:foryou:${libraryBooks.map(b => b.id).sort().join(',')}`
-        if (needsDelay(fyKey)) await delay(800)
-        try { setForYou(await fetchForYou(libraryBooks)) } catch {}
-        setLoadingForYou(false)
-
-        const genreResults = []
-        for (const genre of selectedGenres) {
-          if (needsDelay(`home:genre:${genre.query}`)) await delay(800)
-          try { genreResults.push(await fetchGenre(genre.query)) }
-          catch { genreResults.push([]) }
-          setGenres([...genreResults, ...Array(selectedGenres.length - genreResults.length).fill([])])
-        }
-        setLoadingGenres(false)
-      })()
-    }) // end Promise.all
+    })
+    return () => { mounted = false }
   }, [authLoading, user?.id ?? null])
 
   const counts = {
@@ -444,9 +324,7 @@ export default function Home() {
       {/* For You */}
       <section className="mb-10">
         <SectionHeader title="For You" icon={Sparkles} />
-        {loadingForYou && hasLibrary ? (
-          <BookStrip books={[]} loading={true} />
-        ) : !hasLibrary || forYou === null ? (
+        {!hasLibrary || forYou === null ? (
           <div
             className="rounded-2xl p-10 text-center"
             style={{ backgroundColor: c.surface, border: `1px dashed ${c.border}` }}
@@ -465,36 +343,40 @@ export default function Home() {
       </section>
 
       {/* What's New */}
-      <section className="mb-10">
-        <SectionHeader
-          title="What's New"
-          icon={TrendingUp}
-          to="/search?q=subject:fiction&orderBy=newest"
-          toLabel="Browse new releases"
-        />
-        <BookStrip books={newBooks} loading={loadingNew} />
-      </section>
+      {newBooks.length > 0 && (
+        <section className="mb-10">
+          <SectionHeader
+            title="What's New"
+            icon={TrendingUp}
+            to="/search"
+            toLabel="Browse all"
+          />
+          <BookStrip books={newBooks} loading={false} />
+        </section>
+      )}
 
-      {/* Recommended for You */}
-      <section className="mb-10">
-        <SectionHeader
-          title="Popular Picks"
-          icon={Sparkles}
-          to="/search"
-          toLabel="Explore more"
-        />
-        <BookStrip books={recommended} loading={loadingRec} />
-      </section>
+      {/* Popular Picks */}
+      {recommended.length > 0 && (
+        <section className="mb-10">
+          <SectionHeader
+            title="Popular Picks"
+            icon={Sparkles}
+            to="/search"
+            toLabel="Explore more"
+          />
+          <BookStrip books={recommended} loading={false} />
+        </section>
+      )}
 
       {/* Genre strips */}
-      {selectedGenres.map((genre, i) => (
+      {genres.map(({ genre, books }) => (
         <section key={genre.label} className="mb-10">
           <SectionHeader
             title={genre.label}
-            to={`/search?q=${encodeURIComponent(genre.searchQ)}`}
+            to={`/search?q=${encodeURIComponent(genre.label)}`}
             toLabel="See more"
           />
-          <BookStrip books={genres[i]} loading={loadingGenres} />
+          <BookStrip books={books} loading={false} />
         </section>
       ))}
 

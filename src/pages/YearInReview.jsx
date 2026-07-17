@@ -50,7 +50,9 @@ export default function YearInReview() {
     const start = new Date(year, 0, 1).getTime()
     const end   = new Date(year + 1, 0, 1).getTime()
 
+    let cancelled = false
     Promise.all([getShelves(), getLog()]).then(([shelves, log]) => {
+      if (cancelled) return
       const readBooks = (shelves['read'] || []).filter(b => b.addedAt >= start && b.addedAt < end)
 
       const totalPages = readBooks.reduce((s, b) => s + (b.pageCount || 0), 0)
@@ -76,8 +78,11 @@ export default function YearInReview() {
       const topRated = [...withRating].sort((a, b) => b.averageRating - a.averageRating)[0] || null
 
       const loggedPages = Object.values(log).reduce((s, e) => {
-        return s + (e.sessions || []).filter(ses => ses.date >= start && ses.date < end)
-                             .reduce((ss, ses) => ss + ses.pagesRead, 0)
+        return s + (e.sessions || []).filter(ses => {
+          if (!ses.date) return false
+          const t = new Date(ses.date + 'T00:00:00').getTime()
+          return !isNaN(t) && t >= start && t < end
+        }).reduce((ss, ses) => ss + ses.pagesRead, 0)
       }, 0)
 
       const byMonth = Array.from({ length: 12 }, () => 0)
@@ -87,7 +92,8 @@ export default function YearInReview() {
       }
 
       setData({ readBooks, totalPages, topGenre, topAuthor, longest, shortest, topRated, loggedPages, byMonth })
-    })
+    }).catch(() => {})
+    return () => { cancelled = true }
   }, [authLoading, user?.id ?? null, year])
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -110,7 +116,7 @@ export default function YearInReview() {
       {/* Header */}
       <div className="mb-10 text-center">
         <div className="flex items-center justify-center gap-6 mb-4">
-          <Link to={`/year-in-review/${prevYear}`} style={{ color: c.textMuted, fontSize: '0.85rem' }}>← {prevYear}</Link>
+          {year > 2000 && <Link to={`/year-in-review/${prevYear}`} style={{ color: c.textMuted, fontSize: '0.85rem' }}>← {prevYear}</Link>}
           <h1 style={{ fontFamily: '"Lora", serif', fontWeight: 700, color: c.textPrimary, fontSize: '2.5rem' }}>
             {year}
           </h1>

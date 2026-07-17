@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3001
 
 app.use((req, res, next) => {
   const origin = req.headers.origin || ''
-  const allowed = origin === 'http://localhost:5173' || /\.vercel\.app$/.test(origin)
+  const allowed = origin === 'http://localhost:5173' || origin === 'https://readgoods.vercel.app' || /^https:\/\/readgoods-[a-z0-9]+-wheretheducksgo\.vercel\.app$/.test(origin)
   if (allowed) res.setHeader('Access-Control-Allow-Origin', origin)
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -39,7 +39,12 @@ function cacheGet(key) {
   if (Date.now() > entry.expiresAt) { cache.delete(key); return null }
   return entry.data
 }
+const MAX_CACHE_SIZE = 500
 function cacheSet(key, data) {
+  if (cache.size >= MAX_CACHE_SIZE) {
+    // Evict the oldest entry (first inserted)
+    cache.delete(cache.keys().next().value)
+  }
   cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL })
 }
 
@@ -200,7 +205,7 @@ app.get('/api/series', async (req, res) => {
         // Check all series-books cache entries for a title match
         const normTitle = title.toLowerCase().trim()
         for (const [key, entry] of cache.entries()) {
-          if (!key.startsWith('series-books2:')) continue
+          if (!key.startsWith('series-books4:')) continue
           const books = entry.data
           if (!Array.isArray(books)) continue
           const match = books.find(b => b.title?.toLowerCase().trim() === normTitle)
@@ -263,81 +268,111 @@ Write in a warm, concise tone. No bullet points.`
   }
 })
 
-// GET /api/series/books?seriesName=&seriesKey=
-// Returns all books in a series with their positions, using OL subject tag search.
+// Parse a book number from a title string (e.g. "Book 3", "#4", "Volume 2")
+function parseBookNumber(title = '') {
+  const WORDS = { one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10 }
+  const m =
+    title.match(/book\s+(one|two|three|four|five|six|seven|eight|nine|ten|\d+)/i) ||
+    title.match(/#\s*(\d+)/i) ||
+    title.match(/vol(?:ume)?\s*\.?\s*(\d+)/i) ||
+    title.match(/part\s+(\d+)/i)
+  if (!m) return null
+  const v = m[1].toLowerCase()
+  return WORDS[v] ?? parseInt(v)
+}
+
+const GB_KEY = process.env.VITE_GOOGLE_BOOKS_KEY
+
+// GET /api/series/books?seriesName=&seriesKey=&author=
+// Returns all books in a series with their positions.
+// Primary: OL series_key search (exact). Fallback: OL subject slug search.
 app.get('/api/series/books', async (req, res) => {
   const { seriesName, seriesKey } = req.query
   if (!seriesName && !seriesKey) return res.status(400).json({ error: 'Provide seriesName or seriesKey' })
 
-  const cacheKey = `series-books2:${seriesName || seriesKey}`
+  const cacheKey = `series-books4:${seriesKey || seriesName}`
   const cached = cacheGet(cacheKey)
   if (cached) return res.json(cached)
 
   try {
-    // Derive OL subject slug: "Percy Jackson & the Olympians" → "Serie:Percy_Jackson_and_the_Olympians"
-    const slug = (seriesName || '')
-      .replace(/\s*&\s*/g, '_and_')
-      .replace(/\s+/g, '_')
-    const subject = `Serie:${slug}`
+    let olDocs = []
 
-    const r = await ol.get('/search.json', {
-      params: {
-        q: `subject:"${subject}"`,
-        fields: 'key,title,first_publish_year,cover_i',
-        limit: 12,
-      },
-    })
-    const docs = r.data.docs || []
+    // 1a. If we have the OL series key (e.g. /series/12345), search directly — most accurate
+    if (seriesKey) {
+      try {
+        const r = await ol.get('/search.json', {
+          params: { q: `series_key:${seriesKey}`, fields: 'key,title,first_publish_year,cover_i', limit: 50 },
+        })
+        olDocs = r.data.docs || []
+      } catch {}
+    }
 
-    // Deduplicate by normalized title, keep earliest year per title
+    // 1b. Fall back to subject slug search if direct key search returned nothing
+    if (olDocs.length === 0 && seriesName) {
+      try {
+        const slug = seriesName.replace(/\s*&\s*/g, '_and_').replace(/\s+/g, '_')
+        const r = await ol.get('/search.json', {
+          params: { q: `subject:"Serie:${slug}"`, fields: 'key,title,first_publish_year,cover_i', limit: 50 },
+        })
+        olDocs = r.data.docs || []
+      } catch {}
+    }
+
+    // Deduplicate OL docs by normalized title, keep earliest year
     const byTitle = new Map()
-    for (const d of docs) {
+    for (const d of olDocs) {
       const key = d.title?.toLowerCase().trim()
       if (!key) continue
-      const existing = byTitle.get(key)
-      if (!existing || (d.first_publish_year && (!existing.first_publish_year || d.first_publish_year < existing.first_publish_year))) {
+      const ex = byTitle.get(key)
+      if (!ex || (d.first_publish_year && (!ex.first_publish_year || d.first_publish_year < ex.first_publish_year))) {
         byTitle.set(key, d)
       }
     }
-    const unique = [...byTitle.values()]
 
-    // Fetch each work's actual series position in parallel (best-effort, 8s per call)
+    // Fetch OL work records in parallel to get series positions
     const withPositions = await Promise.allSettled(
-      unique.map(async (d, i) => {
+      [...byTitle.values()].map(async d => {
         let position = null
         try {
-          const wr = await ol.get(`${d.key}.json`, { timeout: 8000 })
+          const wr = await ol.get(`${d.key}.json`, { timeout: 6000 })
           const entry = wr.data?.series?.[0]
           position = entry?.position ? parseFloat(entry.position) : null
         } catch {}
+        if (position === null) position = parseBookNumber(d.title)
         return {
           title: d.title,
           year: d.first_publish_year || null,
           position,
           cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : null,
           olKey: d.key,
-          yearIndex: i,
         }
       })
     )
 
-    const resolved = withPositions
-      .filter(r => r.status === 'fulfilled')
-      .map(r => r.value)
+    const resolved = withPositions.filter(r => r.status === 'fulfilled').map(r => r.value)
 
-    // For any that failed to get a position, fall back to year-then-title order
-    const anyHasPosition = resolved.some(b => b.position !== null)
-    if (anyHasPosition) {
-      resolved.sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
-    } else {
-      resolved.sort((a, b) => {
-        const yd = (a.year || 9999) - (b.year || 9999)
-        return yd !== 0 ? yd : (a.title || '').localeCompare(b.title || '')
-      })
+    // Deduplicate positioned books by position, keeping the entry with a cover
+    const byPos = new Map()
+    const noPosition = []
+    for (const b of resolved) {
+      if (b.position === null) { noPosition.push(b); continue }
+      const ex = byPos.get(b.position)
+      if (!ex || (!ex.cover && b.cover)) byPos.set(b.position, b)
     }
-    const books = resolved.map((b, i) => ({ ...b, position: b.position ?? (i + 1) }))
 
-    cacheSet(cacheKey, books)
+    let books
+    if (byPos.size > 0) {
+      // Append positionless books after the positioned ones, sorted by year
+      const positionless = noPosition
+        .sort((a, b) => (a.year || 9999) - (b.year || 9999))
+        .map((b, i) => ({ ...b, position: byPos.size + i + 1 }))
+      books = [...byPos.values()].sort((a, b) => a.position - b.position).concat(positionless)
+    } else {
+      // No positions found — sort by year and assign sequential positions
+      books = resolved.sort((a, b) => (a.year || 9999) - (b.year || 9999)).map((b, i) => ({ ...b, position: i + 1 }))
+    }
+
+    if (books.length) cacheSet(cacheKey, books)
     res.json(books)
   } catch (err) {
     console.error('Series books error:', err.message)
@@ -402,10 +437,31 @@ function makeId() {
   return Math.random().toString(36).slice(2, 8).toUpperCase()
 }
 
+// Per-club mutex to serialize concurrent member updates and prevent TOCTOU data loss
+const clubLocks = new Map()
+async function withClubLock(clubId, fn) {
+  const pending = clubLocks.get(clubId) || Promise.resolve()
+  let release
+  const next = new Promise(r => { release = r })
+  clubLocks.set(clubId, next)
+  await pending
+  try { return await fn() } finally {
+    release()
+    if (clubLocks.get(clubId) === next) clubLocks.delete(clubId)
+  }
+}
+
 // POST /api/club — create a new club
 app.post('/api/club', async (req, res) => {
   const { bookId, bookTitle, bookCover, creatorName } = req.body
   if (!bookId || !bookTitle || !creatorName) return res.status(400).json({ error: 'Missing fields' })
+  if (String(bookTitle).length > 500 || String(creatorName).length > 200) return res.status(400).json({ error: 'Field too long' })
+  if (bookCover) {
+    try {
+      const u = new URL(bookCover)
+      if (u.protocol !== 'https:') return res.status(400).json({ error: 'bookCover must be an https:// URL' })
+    } catch { return res.status(400).json({ error: 'bookCover is not a valid URL' }) }
+  }
   const id = makeId()
   const { error } = await sb.from('book_clubs').insert({
     id,
@@ -439,28 +495,37 @@ app.get('/api/club/:id', async (req, res) => {
 // POST /api/club/:id/update — upsert a member's progress/note
 app.post('/api/club/:id/update', async (req, res) => {
   const clubId = req.params.id.toUpperCase()
-  const { data: club, error } = await sb
-    .from('book_clubs')
-    .select('members')
-    .eq('id', clubId)
-    .maybeSingle()
-  if (error || !club) return res.status(404).json({ error: 'Club not found' })
-
   const { name, progress, note } = req.body
   if (!name) return res.status(400).json({ error: 'Name required' })
+  if (typeof name === 'string' && name.length > 200) return res.status(400).json({ error: 'Name too long' })
+  if (progress && typeof progress === 'string' && progress.length > 200) return res.status(400).json({ error: 'Progress too long' })
+  if (note && typeof note === 'string' && note.length > 5000) return res.status(400).json({ error: 'Note too long' })
 
-  const members = club.members || []
-  const idx = members.findIndex(m => m.name.toLowerCase() === name.toLowerCase())
-  if (idx >= 0) {
-    members[idx] = { ...members[idx], progress: progress ?? members[idx].progress, note: note ?? members[idx].note, updatedAt: Date.now() }
-  } else {
-    members.push({ name, progress: progress || '', note: note || '', updatedAt: Date.now() })
-  }
+  let upErr
+  try {
+    await withClubLock(clubId, async () => {
+      const { data: club, error } = await sb.from('book_clubs').select('members').eq('id', clubId).maybeSingle()
+      if (error || !club) { upErr = 'not_found'; return }
 
-  const { error: upErr } = await sb.from('book_clubs').update({ members }).eq('id', clubId)
-  if (upErr) { console.error(upErr); return res.status(500).json({ error: 'DB error' }) }
+      const members = club.members || []
+      const idx = members.findIndex(m => (m.name || '').toLowerCase() === name.toLowerCase())
+      if (idx >= 0) {
+        members[idx] = { ...members[idx], progress: progress ?? members[idx].progress, note: note ?? members[idx].note, updatedAt: Date.now() }
+      } else {
+        members.push({ name, progress: progress || '', note: note || '', updatedAt: Date.now() })
+      }
 
-  const { data: updated } = await sb.from('book_clubs').select('*').eq('id', clubId).maybeSingle()
+      const { error: err } = await sb.from('book_clubs').update({ members }).eq('id', clubId)
+      if (err) { upErr = 'db_error'; console.error(err) }
+    })
+  } catch (err) { console.error(err); return res.status(500).json({ error: 'DB error' }) }
+
+  if (upErr === 'not_found') return res.status(404).json({ error: 'Club not found' })
+  if (upErr === 'db_error') return res.status(500).json({ error: 'DB error' })
+
+  const { data: updated, error: fetchErr } = await sb.from('book_clubs').select('*').eq('id', clubId).maybeSingle()
+  if (fetchErr) { console.error(fetchErr); return res.status(500).json({ error: 'DB error' }) }
+  if (!updated) return res.status(404).json({ error: 'Club not found' })
   res.json({
     id: updated.id,
     bookId: updated.book_id,

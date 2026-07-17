@@ -241,24 +241,34 @@ export default function Analytics() {
     if (!form.bookId) { setFormError('Please select a book.'); return }
     if (totalMins < 1) { setFormError('Enter how long you read (hours and/or minutes).'); return }
     if (parseInt(form.minutes, 10) > 59) { setFormError('Minutes must be 0–59. Use the Hours field for longer sessions.'); return }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.date) || isNaN(new Date(form.date).getTime())) { setFormError('Invalid date.'); return }
+    if (form.pageFrom && form.pageTo && parseInt(form.pageFrom, 10) >= parseInt(form.pageTo, 10)) { setFormError('Page To must be greater than Page From.'); return }
     const book = allBooks.find(b => b.id === form.bookId)
     setSaving(true)
-    await logSession({
-      bookId: form.bookId,
-      bookTitle: book?.title || form.bookId,
-      date: form.date,
-      minutes: totalMins,
-      pages: (form.pageFrom && form.pageTo) ? Math.max(0, parseInt(form.pageTo, 10) - parseInt(form.pageFrom, 10)) : null,
-    })
-    const updated = await getSessions()
-    setSessions(updated)
-    setForm(f => ({ ...f, hours: '', minutes: '', pageFrom: '', pageTo: '' }))
-    setSaving(false)
+    try {
+      await logSession({
+        bookId: form.bookId,
+        bookTitle: book?.title || form.bookId,
+        date: form.date,
+        minutes: totalMins,
+        pages: (form.pageFrom && form.pageTo) ? Math.max(0, parseInt(form.pageTo, 10) - parseInt(form.pageFrom, 10)) : null,
+      })
+      const updated = await getSessions()
+      setSessions(updated)
+      setForm(f => ({ ...f, hours: '', minutes: '', pageFrom: '', pageTo: '' }))
+    } catch (err) {
+      setFormError('Failed to save session. Please try again.')
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleDelete(id) {
-    await deleteSession(id)
-    setSessions(s => s.filter(x => x.id !== id))
+    try {
+      await deleteSession(id)
+      setSessions(s => s.filter(x => x.id !== id))
+    } catch {}
   }
 
   const inputStyle = {

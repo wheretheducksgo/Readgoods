@@ -1,11 +1,10 @@
 const BASE = 'https://www.googleapis.com/books/v1'
 const KEY = import.meta.env.VITE_GOOGLE_BOOKS_KEY || ''
 
-// Strip the imgtk signed token (zoom-specific, expires) and normalize to https.
-// Fall back to a direct content URL constructed from the volume ID.
-function cleanImg(url, id) {
-  if (url) return url.replace('http:', 'https:').replace(/&imgtk=[^&]+/, '')
-  return `https://books.google.com/books/content?id=${id}&printsec=frontcover&img=1&zoom=1`
+// Normalize to https and strip the expiring imgtk token.
+function cleanImg(url) {
+  if (!url) return null
+  return url.replace('http:', 'https:').replace(/&imgtk=[^&]+/, '')
 }
 
 function params(obj) {
@@ -21,8 +20,8 @@ export function normalizeVolume(v) {
     title: info.title || 'Unknown Title',
     authors: info.authors || [],
     description: info.description || '',
-    cover: cleanImg(info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail, v.id),
-    coverLarge: cleanImg(info.imageLinks?.large || info.imageLinks?.medium, v.id),
+    cover: cleanImg(info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail),
+    coverLarge: cleanImg(info.imageLinks?.large || info.imageLinks?.medium),
     publishedDate: info.publishedDate || '',
     publisher: info.publisher || '',
     pageCount: info.pageCount || null,

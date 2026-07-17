@@ -15,7 +15,9 @@ const MIN_DIST = 60
 
 // Normalize author names so minor formatting differences don't break matching
 function normAuthor(name) {
-  return name.toLowerCase().replace(/\.\s*/g, '').replace(/\s+/g, ' ').trim()
+  return name.toLowerCase()
+    .replace(/\s*(jr\.?|sr\.?|i{2,4}|iv|vi{0,3}|viii)\.?\s*$/i, '')
+    .replace(/\.\s*/g, '').replace(/\s+/g, ' ').trim()
 }
 
 function buildGraph(books) {

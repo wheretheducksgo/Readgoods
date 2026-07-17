@@ -27,8 +27,12 @@ export default function BookCard({ book, size = 'md' }) {
             loading="lazy"
           />
         ) : (
-          <div className="w-full h-full flex items-end p-2" style={{ background: `linear-gradient(135deg, ${c.surface2} 0%, ${c.surface} 100%)` }}>
-            <span className="text-xs leading-tight" style={{ color: c.accentText, fontFamily: '"Lora", serif', fontWeight: 500 }}>
+          <div className="w-full h-full flex items-end p-2" style={{
+            background: book.coverHue != null
+              ? `linear-gradient(150deg, hsl(${book.coverHue},35%,22%) 0%, hsl(${book.coverHue},50%,14%) 100%)`
+              : `linear-gradient(135deg, ${c.surface2} 0%, ${c.surface} 100%)`,
+          }}>
+            <span className="text-xs leading-tight" style={{ color: `hsl(${book.coverHue ?? 220},60%,75%)`, fontFamily: '"Lora", serif', fontWeight: 500 }}>
               {book.title}
             </span>
           </div>

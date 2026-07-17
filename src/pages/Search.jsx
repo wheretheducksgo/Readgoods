@@ -1,23 +1,11 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Search as SearchIcon, X, Star, ChevronDown, ChevronUp } from 'lucide-react'
 import BookCard from '../components/BookCard'
-import { searchBooks } from '../lib/googleBooks'
+import { searchBooks, GENRES as ALL_GENRES, getPopularBooks } from '../lib/localBooks'
 import { c } from '../lib/theme'
 
-const GENRES = [
-  { label: 'Fiction', q: 'subject:fiction' },
-  { label: 'Literary Fiction', q: 'subject:literary fiction' },
-  { label: 'Mystery & Thriller', q: 'subject:mystery' },
-  { label: 'Science Fiction', q: 'subject:science fiction' },
-  { label: 'Fantasy', q: 'subject:fantasy' },
-  { label: 'Biography', q: 'subject:biography' },
-  { label: 'History', q: 'subject:history' },
-  { label: 'Nature & Environment', q: 'subject:nature' },
-  { label: 'Poetry', q: 'subject:poetry' },
-  { label: 'Self-Help', q: 'subject:self-help' },
-  { label: 'Romance', q: 'subject:romance' },
-  { label: 'Young Adult', q: 'subject:young adult' },
-]
+const GENRES = ALL_GENRES.map(g => ({ label: g, q: g }))
 
 const RATING_OPTIONS = [
   { label: 'Any rating', value: 0 },
@@ -26,15 +14,9 @@ const RATING_OPTIONS = [
   { label: '2★ and up', value: 2 },
 ]
 
-const PRICE_OPTIONS = [
-  { label: 'Any', value: 'any' },
-  { label: 'Free ebooks', value: 'free-ebooks' },
-  { label: 'Paid ebooks', value: 'paid-ebooks' },
-  { label: 'Full preview', value: 'full' },
-]
-
 const SORT_OPTIONS = [
   { label: 'Relevance', value: 'relevance' },
+  { label: 'Highest rated', value: 'rating' },
   { label: 'Newest first', value: 'newest' },
 ]
 
@@ -81,108 +63,80 @@ function RadioButton({ checked, onChange, children }) {
   )
 }
 
-const PAGE_SIZE = 60
-const BATCH = 40
-const BATCHES = 10 // 10 × 40 = 400 raw; Google serves ~200 unique, gives us 3+ full pages
+function runLocalSearch(q, genreLabel, minRating, sortBy) {
+  const { books: textResults } = q.trim()
+    ? searchBooks(q.trim())
+    : { books: [] }
 
-function popularityScore(book) {
-  if (!book.averageRating) return book.cover ? 0.8 : 0.3
-  return book.averageRating * Math.log10((book.ratingsCount ?? 0) + 10)
-}
+  const genreResults = genreLabel
+    ? searchBooks(genreLabel).books
+    : []
 
-function dedup(books) {
-  const seen = new Set()
-  return books.filter(b => seen.has(b.id) ? false : seen.add(b.id))
-}
-
-function rankBooks(books, sortBy) {
-  if (sortBy !== 'relevance') return books
-  return [...books].sort((a, b) => popularityScore(b) - popularityScore(a))
-}
-
-// Fetch all accessible results in one parallel burst, then rank and store client-side.
-// For relevance searches, split batches across two orderings (relevance + newest) so we
-// pull different books from Google's index and maximize unique results after dedup.
-async function fetchAllBooks(q, extra = {}, sortBy = 'relevance', minRating = 0) {
-  const half = BATCHES / 2 // 5 + 5
-  let requests
-  if (sortBy === 'relevance') {
-    // Half with Google's default relevance ordering, half with newest — different result sets
-    const byRelevance = Array.from({ length: half }, (_, i) =>
-      searchBooks(q, { startIndex: i * BATCH, maxResults: BATCH, ...extra })
-    )
-    const byNewest = Array.from({ length: half }, (_, i) =>
-      searchBooks(q, { startIndex: i * BATCH, maxResults: BATCH, ...extra, orderBy: 'newest' })
-    )
-    requests = [...byRelevance, ...byNewest]
+  let books
+  if (q.trim() && genreLabel) {
+    const genreIds = new Set(genreResults.map(b => b.id))
+    books = textResults.filter(b => genreIds.has(b.id))
+  } else if (genreLabel) {
+    books = genreResults
+  } else if (q.trim()) {
+    books = textResults
   } else {
-    requests = Array.from({ length: BATCHES }, (_, i) =>
-      searchBooks(q, { startIndex: i * BATCH, maxResults: BATCH, ...extra })
-    )
+    books = getPopularBooks({ maxResults: 100 })
   }
 
-  const results = await Promise.allSettled(requests)
-  const fulfilled = results.filter(r => r.status === 'fulfilled')
-  const raw = fulfilled.flatMap(r => r.value.books)
-  const apiTotal = fulfilled[0]?.value.total || 0
+  if (minRating > 0) books = books.filter(b => (b.averageRating || 0) >= minRating)
 
-  let books = dedup(raw)
-  if (minRating > 0) books = books.filter(b => b.averageRating >= minRating)
-  books = rankBooks(books, sortBy)
+  if (sortBy === 'rating') {
+    books = [...books].sort((a, b) => (b.averageRating || 0) - (a.averageRating || 0))
+  } else if (sortBy === 'newest') {
+    books = [...books].sort((a, b) => b.publishedDate.localeCompare(a.publishedDate))
+  }
 
-  return { books, apiTotal }
+  return books
 }
 
+const PAGE_SIZE = 60
+
 export default function Search() {
+  const location = useLocation()
   const [query, setQuery] = useState('')
   const [allBooks, setAllBooks] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [apiTotal, setApiTotal] = useState(0)
   const [hasSearched, setHasSearched] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
 
   const [selectedGenre, setSelectedGenre] = useState(null)
   const [minRating, setMinRating] = useState(0)
-  const [priceFilter, setPriceFilter] = useState('any')
   const [sortBy, setSortBy] = useState('relevance')
 
   const inputRef = useRef(null)
 
-  // Derived pagination — purely client-side, no API calls on page change
+  // Derived pagination — purely client-side
   const totalPages = Math.ceil(allBooks.length / PAGE_SIZE)
   const books = allBooks.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
 
-  function buildQuery() {
-    const parts = []
-    if (query.trim()) parts.push(query.trim())
-    if (selectedGenre) parts.push(selectedGenre.q)
-    return parts.join('+') || ''
-  }
+  // Seed query from URL ?q= param on mount
+  useEffect(() => {
+    const q = new URLSearchParams(location.search).get('q')
+    if (q) {
+      setQuery(q)
+      const results = runLocalSearch(q, null, 0, 'relevance')
+      setAllBooks(results)
+      setHasSearched(true)
+    }
+  }, [])
 
   function goToPage(pageIndex) {
     setCurrentPage(pageIndex)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const runSearch = useCallback(async () => {
-    const q = buildQuery()
-    if (!q) return
-    const extra = {}
-    if (priceFilter !== 'any') extra.filter = priceFilter
-    if (sortBy !== 'relevance') extra.orderBy = sortBy
-    setLoading(true)
+  const runSearch = useCallback(() => {
+    if (!query.trim() && !selectedGenre) return
+    const results = runLocalSearch(query, selectedGenre?.q || null, minRating, sortBy)
+    setAllBooks(results)
     setCurrentPage(0)
-    try {
-      const { books, apiTotal } = await fetchAllBooks(q, extra, sortBy, minRating)
-      setAllBooks(books)
-      setApiTotal(apiTotal)
-      setHasSearched(true)
-    } catch {
-      // silently fail
-    } finally {
-      setLoading(false)
-    }
-  }, [query, selectedGenre, minRating, priceFilter, sortBy])
+    setHasSearched(true)
+  }, [query, selectedGenre, minRating, sortBy])
 
   function handleKey(e) {
     if (e.key === 'Enter') runSearch()
@@ -196,14 +150,13 @@ export default function Search() {
     setQuery('')
     setSelectedGenre(null)
     setMinRating(0)
-    setPriceFilter('any')
     setSortBy('relevance')
-    setBooks([])
+    setAllBooks([])
     setHasSearched(false)
     inputRef.current?.focus()
   }
 
-  const hasActiveFilters = selectedGenre !== null || minRating > 0 || priceFilter !== 'any' || sortBy !== 'relevance'
+  const hasActiveFilters = selectedGenre !== null || minRating > 0 || sortBy !== 'relevance'
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
@@ -244,25 +197,19 @@ export default function Search() {
         </div>
         <button
           onClick={runSearch}
-          disabled={loading || (!query.trim() && !hasActiveFilters)}
+          disabled={!query.trim() && !hasActiveFilters}
           className="flex items-center gap-2 px-6 rounded-xl text-sm font-medium transition-all"
           style={{
-            backgroundColor: (loading || (!query.trim() && !hasActiveFilters)) ? c.surface2 : c.btnPrimary,
-            color: (loading || (!query.trim() && !hasActiveFilters)) ? c.textMuted : c.btnPrimaryText,
+            backgroundColor: (!query.trim() && !hasActiveFilters) ? c.surface2 : c.btnPrimary,
+            color: (!query.trim() && !hasActiveFilters) ? c.textMuted : c.btnPrimaryText,
             border: 'none',
-            cursor: (loading || (!query.trim() && !hasActiveFilters)) ? 'default' : 'pointer',
+            cursor: (!query.trim() && !hasActiveFilters) ? 'default' : 'pointer',
             height: 50,
             whiteSpace: 'nowrap',
           }}
         >
-          {loading ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite' }}>
-              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-            </svg>
-          ) : (
-            <SearchIcon size={15} />
-          )}
-          {loading ? 'Searching…' : 'Search'}
+          <SearchIcon size={15} />
+          Search
         </button>
       </div>
 
@@ -282,14 +229,6 @@ export default function Search() {
             <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: c.warmBg, color: c.warmText }}>
               {minRating}★ & up
               <button onClick={() => setMinRating(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: c.textSecondary, marginLeft: 1 }}>
-                <X size={10} />
-              </button>
-            </span>
-          )}
-          {priceFilter !== 'any' && (
-            <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: c.warmBg, color: c.warmText }}>
-              {PRICE_OPTIONS.find(p => p.value === priceFilter)?.label}
-              <button onClick={() => setPriceFilter('any')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: c.textSecondary, marginLeft: 1 }}>
                 <X size={10} />
               </button>
             </span>
@@ -347,16 +286,6 @@ export default function Search() {
                 </div>
               </FilterSection>
 
-              <FilterSection title="Availability">
-                <div className="flex flex-col">
-                  {PRICE_OPTIONS.map(opt => (
-                    <RadioButton key={opt.value} checked={priceFilter === opt.value} onChange={() => setPriceFilter(opt.value)}>
-                      {opt.label}
-                    </RadioButton>
-                  ))}
-                </div>
-              </FilterSection>
-
               <FilterSection title="Sort By" defaultOpen={false}>
                 <div className="flex flex-col">
                   {SORT_OPTIONS.map(opt => (
@@ -374,7 +303,7 @@ export default function Search() {
         <div className="flex-1 min-w-0">
 
           {/* Idle */}
-          {!hasSearched && !loading && (
+          {!hasSearched && (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <SearchIcon size={38} style={{ color: c.textMuted, marginBottom: 14 }} />
               <p style={{ fontFamily: '"Lora", serif', fontSize: '1.05rem', color: c.textSecondary, marginBottom: 6 }}>
@@ -386,21 +315,8 @@ export default function Search() {
             </div>
           )}
 
-          {/* Loading skeletons */}
-          {loading && (
-            <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(108px, 1fr))' }}>
-              {Array.from({ length: 24 }).map((_, i) => (
-                <div key={i} className="flex flex-col gap-2">
-                  <div className="rounded-xl animate-pulse" style={{ width: '100%', aspectRatio: '2/3', backgroundColor: c.surface2 }} />
-                  <div className="rounded animate-pulse" style={{ height: 10, width: '80%', backgroundColor: c.surface2 }} />
-                  <div className="rounded animate-pulse" style={{ height: 8, width: '55%', backgroundColor: c.surface }} />
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* No results */}
-          {hasSearched && !loading && books.length === 0 && (
+          {hasSearched && books.length === 0 && (
             <div className="flex flex-col items-center py-20 text-center">
               <SearchIcon size={34} style={{ color: c.textMuted, marginBottom: 12 }} />
               <p style={{ fontFamily: '"Lora", serif', fontSize: '1rem', color: c.textSecondary }}>No results found</p>
@@ -409,12 +325,11 @@ export default function Search() {
           )}
 
           {/* Results */}
-          {!loading && books.length > 0 && (
+          {books.length > 0 && (
             <>
               <div className="flex items-center justify-between mb-5">
                 <p style={{ fontSize: '0.78rem', color: c.textSecondary }}>
                   <span style={{ color: c.textPrimary, fontWeight: 500 }}>{allBooks.length}</span> books found
-                  {apiTotal > allBooks.length && <span> · {apiTotal.toLocaleString()} in catalog</span>}
                 </p>
                 {totalPages > 1 && (
                   <p style={{ fontSize: '0.78rem', color: c.textSecondary }}>
@@ -489,7 +404,6 @@ export default function Search() {
         </div>
       </div>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }

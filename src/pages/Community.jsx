@@ -104,9 +104,12 @@ export default function Community() {
 
   useEffect(() => {
     if (authLoading) return
+    let cancelled = false
     setLoading(true)
     getCommunityBooks({ query: debouncedQuery, tags: activeTags, minRating })
-      .then(results => { setBooks(results); setLoading(false) })
+      .then(results => { if (!cancelled) { setBooks(results); setLoading(false) } })
+      .catch(() => { if (!cancelled) { setBooks([]); setLoading(false) } })
+    return () => { cancelled = true }
   }, [authLoading, user?.id ?? null, debouncedQuery, activeTags, minRating])
 
   function toggleTag(tag) {

@@ -1,6 +1,6 @@
 import { getShelves, addToShelf } from './shelves'
 import { setBookRating } from './ratings'
-import { searchBooks, normalizeVolume } from './googleBooks'
+import { searchBooks } from './localBooks'
 
 const SHELF_TO_GOODREADS = {
   'read': 'read',

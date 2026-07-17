@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, BookOpen, Save, Trash2, Quote, Plus, X } from 'lucide-react'
-import { getVolume } from '../lib/googleBooks'
+import { getVolume } from '../lib/localBooks'
 import { getBookShelf } from '../lib/shelves'
 import { getBookHighlights, addHighlight, removeHighlight } from '../lib/highlights'
 import { getNote, saveNote } from '../lib/notes'
@@ -119,6 +119,8 @@ function HighlightsPanel({ bookId }) {
 
 export default function BookNotes() {
   const { id } = useParams()
+  const idRef = useRef(id)
+  const mountedRef = useRef(true)
   const [book, setBook] = useState(null)
   const [text, setText] = useState('')
   const [saved, setSaved] = useState(false)
@@ -126,24 +128,35 @@ export default function BookNotes() {
   const saveTimer = useRef(null)
 
   useEffect(() => {
-    getVolume(id).then(setBook).catch(() => {})
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    idRef.current = id
+    try { setBook(getVolume(id)) } catch {}
     getBookShelf(id).then(setShelf)
     getNote(id).then(t => { if (t) setText(t) })
+    return () => clearTimeout(saveTimer.current)
   }, [id])
 
   function handleChange(e) {
     setText(e.target.value)
     setSaved(false)
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      saveNote(id, e.target.value)
-      setSaved(true)
+    saveTimer.current = setTimeout(async () => {
+      try {
+        await saveNote(idRef.current, e.target.value)
+        if (mountedRef.current) setSaved(true)
+      } catch {
+        if (mountedRef.current) setSaved(false)
+      }
     }, 800)
   }
 
   function handleClear() {
     setText('')
-    saveNote(id, '')
+    saveNote(idRef.current, '')
     setSaved(false)
   }
 

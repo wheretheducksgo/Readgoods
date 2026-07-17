@@ -154,7 +154,7 @@ export default function Import() {
               </div>
               {rows.length > 100 && (
                 <div className="px-3 py-2 text-xs" style={{ color: c.textMuted, borderTop: `1px solid ${c.border}` }}>
-                  Showing first 100 of {rows.length} books
+                  Showing first 100 of {rows.length} books — all {rows.length} will be imported
                 </div>
               )}
             </div>

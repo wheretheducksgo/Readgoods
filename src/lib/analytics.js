@@ -45,16 +45,21 @@ export async function getSessions() {
 export function computeStats(sessions) {
   const byDate = {}
   for (const s of sessions) {
+    if (!s.date) continue
     byDate[s.date] = (byDate[s.date] || 0) + s.minutes
   }
 
   // Streak: count consecutive days ending today (or yesterday if today has no session)
-  const today = new Date().toISOString().slice(0, 10)
+  // Use local date strings to match how sessions are stored
+  function localDateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  }
+  const today = localDateStr(new Date())
   let streak = 0
   const cur = new Date()
   if (!byDate[today]) cur.setDate(cur.getDate() - 1)
   for (let i = 0; i < 365; i++) {
-    const key = cur.toISOString().slice(0, 10)
+    const key = localDateStr(cur)
     if (byDate[key]) { streak++; cur.setDate(cur.getDate() - 1) }
     else break
   }
@@ -91,7 +96,7 @@ export function buildHeatmapGrid(byDate) {
   for (let w = 0; w < 16; w++) {
     const week = []
     for (let day = 0; day < 7; day++) {
-      const key = d.toISOString().slice(0, 10)
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
       week.push({ date: key, minutes: byDate[key] || 0, future: d > today })
       d.setDate(d.getDate() + 1)
     }

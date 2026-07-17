@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   Star, BookOpen, Calendar, Building, Hash, ChevronRight,
@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import BookCard from '../components/BookCard'
 import ShelfButton from '../components/ShelfButton'
-import { getVolume, getRelatedBooks } from '../lib/googleBooks'
+import { getVolume, getRelatedBooks } from '../lib/localBooks'
 import { getBookReviews, getAISummary } from '../lib/aiReview'
 import { getBookShelf } from '../lib/shelves'
 import { finishReading } from '../lib/readingLog'
@@ -193,6 +193,9 @@ export default function Book() {
   const [myRating, setMyRating] = useState(null)
   const [myReview, setMyReview] = useState('')
   const [reviewSaved, setReviewSaved] = useState(false)
+  const reviewRef = useRef('')
+  const reviewSavedRef = useRef(false)
+  const bookIdRef = useRef(id)
 
   async function refreshShelfState() {
     const shelf = await getBookShelf(id)
@@ -209,6 +212,7 @@ export default function Book() {
   }
 
   useEffect(() => {
+    let active = true
     setLoading(true)
     setBook(null)
     setRelated([])
@@ -217,23 +221,42 @@ export default function Book() {
     setMyReview('')
     setReviewSaved(false)
     getBookShelf(id).then(shelf => {
+      if (!active) return
       setOnShelf(!!shelf)
       setCurrentShelf(shelf)
       if (shelf) {
         Promise.all([getBookRating(id), getBookReview(id)]).then(([rating, review]) => {
+          if (!active) return
           setMyRating(rating)
           setMyReview(review)
+          // Only seed ref from DB if the user hasn't typed anything yet
+          if (!reviewRef.current) reviewRef.current = review || ''
         })
       }
     })
-    getVolume(id)
-      .then(b => {
-        setBook(b)
-        setLoading(false)
-        return getRelatedBooks(b)
-      })
-      .then(r => setRelated(r.filter(b => b.cover).slice(0, 8)))
-      .catch(e => { setError(e.message); setLoading(false) })
+    try {
+      const b = getVolume(id)
+      if (!active) return
+      setBook(b)
+      setLoading(false)
+      const rel = getRelatedBooks(b)
+      if (active) setRelated(rel.slice(0, 8))
+    } catch (e) {
+      if (active) { setError(e.message); setLoading(false) }
+    }
+    return () => { active = false }
+  }, [id])
+
+  // Save unsaved review on unmount (e.g. user navigates away mid-typing)
+  useEffect(() => {
+    bookIdRef.current = id
+    reviewRef.current = ''
+    reviewSavedRef.current = false
+    return () => {
+      if (!reviewSavedRef.current && reviewRef.current) {
+        setBookReview(bookIdRef.current, reviewRef.current)
+      }
+    }
   }, [id])
 
   if (loading) {
@@ -252,11 +275,12 @@ export default function Book() {
     )
   }
 
-  const descWords = book.description.split(' ')
+  const desc = book.description || ''
+  const descWords = desc.split(' ')
   const isLong = descWords.length > 80
   const displayDesc = (isLong && !expanded)
     ? descWords.slice(0, 80).join(' ') + '…'
-    : book.description
+    : desc
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -276,9 +300,13 @@ export default function Book() {
           ) : (
             <div
               className="w-full h-full flex items-end p-4"
-              style={{ background: `linear-gradient(135deg, ${c.surface2} 0%, ${c.surface} 100%)` }}
+              style={{
+                background: book.coverHue != null
+                  ? `linear-gradient(150deg, hsl(${book.coverHue},35%,22%) 0%, hsl(${book.coverHue},50%,14%) 100%)`
+                  : `linear-gradient(135deg, ${c.surface2} 0%, ${c.surface} 100%)`,
+              }}
             >
-              <span style={{ fontFamily: '"Lora", serif', color: c.accentText, fontWeight: 500, fontSize: '0.9rem' }}>
+              <span style={{ fontFamily: '"Lora", serif', color: `hsl(${book.coverHue ?? 220},60%,75%)`, fontWeight: 500, fontSize: '0.9rem' }}>
                 {book.title}
               </span>
             </div>
@@ -429,7 +457,7 @@ export default function Book() {
                         const next = myRating === star ? null : star
                         setMyRating(next)
                         await setBookRating(book.id, next)
-                        if (!next) { setMyReview(''); await setBookReview(book.id, '') }
+                        if (!next) { setMyReview(''); reviewRef.current = ''; reviewSavedRef.current = true; await setBookReview(book.id, '') }
                       }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
                     >
@@ -450,9 +478,10 @@ export default function Book() {
                       placeholder="Write a review… (optional)"
                       value={myReview}
                       rows={3}
-                      onChange={e => { setMyReview(e.target.value); setReviewSaved(false) }}
+                      onChange={e => { setMyReview(e.target.value); reviewRef.current = e.target.value; reviewSavedRef.current = false; setReviewSaved(false) }}
                       onBlur={async () => {
-                        await setBookReview(book.id, myReview)
+                        await setBookReview(bookIdRef.current, reviewRef.current)
+                        reviewSavedRef.current = true
                         setReviewSaved(true)
                         setTimeout(() => setReviewSaved(false), 2000)
                       }}

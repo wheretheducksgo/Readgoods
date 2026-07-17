@@ -19,13 +19,22 @@ function saveMyClub(club) {
 function JoinGate({ clubId, onJoin }) {
   const [name, setName] = useState('')
   const [club, setClub] = useState(null)
+  const [clubNotFound, setClubNotFound] = useState(false)
+  const [fetchError, setFetchError] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
-    fetch(`${API}/api/club/${clubId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => setClub(d))
-      .catch(() => {})
-  }, [clubId])
+    const controller = new AbortController()
+    fetch(`${API}/api/club/${clubId}`, { signal: controller.signal })
+      .then(r => {
+        if (r.ok) return r.json()
+        if (r.status === 404) { setClubNotFound(true); return null }
+        setFetchError(true); return null
+      })
+      .then(d => { if (d) setClub(d) })
+      .catch(err => { if (err.name !== 'AbortError') setFetchError(true) })
+    return () => controller.abort()
+  }, [clubId, retryCount])
 
   function handleJoin(e) {
     e.preventDefault()
@@ -35,6 +44,24 @@ function JoinGate({ clubId, onJoin }) {
     url.searchParams.set('name', trimmed)
     window.history.replaceState({}, '', url.toString())
     onJoin(trimmed)
+  }
+
+  if (fetchError) {
+    return (
+      <div className="max-w-md mx-auto px-6 py-16 text-center">
+        <p style={{ color: c.textSecondary, fontSize: '0.95rem' }}>Couldn't reach the server. Please try again.</p>
+        <button onClick={() => { setFetchError(false); setClubNotFound(false); setClub(null); setRetryCount(n => n + 1) }} className="mt-4 inline-block text-sm" style={{ color: c.accentText, background: 'none', border: 'none', cursor: 'pointer' }}>Try again</button>
+      </div>
+    )
+  }
+
+  if (clubNotFound) {
+    return (
+      <div className="max-w-md mx-auto px-6 py-16 text-center">
+        <p style={{ color: c.textSecondary, fontSize: '0.95rem' }}>This club link doesn't seem to exist.</p>
+        <Link to="/club/new" className="mt-4 inline-block text-sm" style={{ color: c.accentText }}>← Start a new club</Link>
+      </div>
+    )
   }
 
   return (
@@ -75,11 +102,11 @@ function JoinGate({ clubId, onJoin }) {
           />
           <button
             type="submit"
-            disabled={!name.trim()}
+            disabled={!name.trim() || !club}
             className="w-full rounded-lg py-2.5 text-sm font-medium"
-            style={{ backgroundColor: c.btnPrimary, color: c.btnPrimaryText, cursor: name.trim() ? 'pointer' : 'not-allowed', opacity: name.trim() ? 1 : 0.6 }}
+            style={{ backgroundColor: c.btnPrimary, color: c.btnPrimaryText, cursor: (name.trim() && club) ? 'pointer' : 'not-allowed', opacity: (name.trim() && club) ? 1 : 0.6 }}
           >
-            Join club
+            {club ? 'Join club' : 'Loading…'}
           </button>
         </form>
       </div>
@@ -101,6 +128,13 @@ function CreateClub() {
   async function handleSubmit(e) {
     e.preventDefault()
     if (!bookTitle.trim() || !creatorName.trim()) return
+    const coverUrl = bookCover.trim() || null
+    if (coverUrl) {
+      try {
+        const u = new URL(coverUrl)
+        if (u.protocol !== 'https:') { setError('Cover URL must start with https://'); return }
+      } catch { setError('Cover URL is not valid.'); return }
+    }
     setLoading(true)
     setError('')
     try {
@@ -110,13 +144,13 @@ function CreateClub() {
         body: JSON.stringify({
           bookId: Date.now().toString(),
           bookTitle: bookTitle.trim(),
-          bookCover: bookCover.trim() || null,
+          bookCover: coverUrl,
           creatorName: creatorName.trim(),
         }),
       })
       const data = await res.json()
       if (data.clubId) {
-        saveMyClub({ id: data.clubId, bookTitle: bookTitle.trim(), bookCover: bookCover.trim() || null, createdAt: Date.now() })
+        saveMyClub({ id: data.clubId, bookTitle: bookTitle.trim(), bookCover: coverUrl, createdAt: Date.now() })
         navigate(`/club/${data.clubId}?name=${encodeURIComponent(creatorName.trim())}`)
       } else {
         setError('Could not create club.')
@@ -284,7 +318,7 @@ function ClubView({ clubId, memberName }) {
       if (!res.ok) { setError('Club not found.'); return }
       const data = await res.json()
       setClub(data)
-      const me = data.members.find(m => m.name.toLowerCase() === memberName.toLowerCase())
+      const me = data.members.find(m => (m.name || '').toLowerCase() === memberName.toLowerCase())
       if (me) { setProgress(me.progress || ''); setNote(me.note || '') }
     } catch { setError('Could not reach server.') }
   }

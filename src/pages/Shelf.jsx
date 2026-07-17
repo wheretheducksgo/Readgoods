@@ -23,7 +23,7 @@ function sortBooks(books, sort) {
   if (sort === 'title') return sorted.sort((a, b) => (a.title || '').localeCompare(b.title || ''))
   if (sort === 'author') return sorted.sort((a, b) => (a.authors?.[0] || '').localeCompare(b.authors?.[0] || ''))
   if (sort === 'rating') return sorted.sort((a, b) => (b.averageRating || 0) - (a.averageRating || 0))
-  return sorted // 'added' — keep original order
+  return sorted.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0) || (a.id || '').localeCompare(b.id || ''))
 }
 
 export default function Shelf() {

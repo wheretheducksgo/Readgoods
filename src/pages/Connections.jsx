@@ -1,76 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Loader2 } from 'lucide-react'
-import { getVolume, searchBooks } from '../lib/googleBooks'
+import { ArrowLeft } from 'lucide-react'
+import { getVolume, getSeriesBooks, getCitations, getCitedBy, getRelatedBooks } from '../lib/localBooks'
 import { c } from '../lib/theme'
-
-const PROXY = ''
-
-// ── Data fetching ─────────────────────────────────────────────────────────────
-
-async function fetchSeriesInfo(title, author) {
-  try {
-    const p = new URLSearchParams({ title, author: author || '' })
-    const r = await fetch(`${PROXY}/api/series?${p}`)
-    return r.ok ? r.json() : { found: false }
-  } catch { return { found: false } }
-}
-
-// Extract book number from a Google Books title string
-function parseBookNumber(title = '') {
-  const WORDS = { one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10 }
-  const m =
-    title.match(/book\s+(one|two|three|four|five|six|seven|eight|nine|ten|\d+)/i) ||
-    title.match(/#\s*(\d+)/i) ||
-    title.match(/vol(?:ume)?\s*\.?\s*(\d+)/i) ||
-    title.match(/part\s+(\d+)/i)
-  if (!m) return null
-  const v = m[1].toLowerCase()
-  return WORDS[v] ?? parseInt(v)
-}
-
-// Fetch series books from OL (complete, ordered by publication year).
-// Returns OL-sourced entries: { title, year, position, cover, olKey, id: null }
-async function fetchSeriesBooksOL(seriesName) {
-  if (!seriesName) return []
-  try {
-    const p = new URLSearchParams({ seriesName })
-    const r = await fetch(`${PROXY}/api/series/books?${p}`)
-    if (!r.ok) return []
-    return await r.json()
-  } catch { return [] }
-}
-
-// Resolve a title to a Google Books ID for navigation (best-effort, may return null)
-async function resolveGoogleBooksId(title, author) {
-  try {
-    const q = `intitle:"${title}" inauthor:"${author}"`
-    const { books } = await searchBooks(q, { maxResults: 5 })
-    return books[0]?.id || null
-  } catch { return null }
-}
-
-// Fallback connection types for standalone books
-async function fetchThematicBooks(book) {
-  const cats = book.categories || []
-  const desc = book.description || ''
-  const themes = [
-    ...cats.slice(0, 2),
-    ...(desc.match(/\b(war|love|grief|identity|survival|memory|belonging|exile|revolution|power|friendship|family|loss|redemption)\b/gi) || [])
-      .map(t => t.toLowerCase()).filter((v, i, a) => a.indexOf(v) === i).slice(0, 2),
-  ]
-  if (!themes.length) return []
-  const q = themes.slice(0, 2).map(t => `subject:"${t}"`).join('+')
-  const { books } = await searchBooks(q, { maxResults: 12 })
-  return books.filter(b => b.id !== book.id).slice(0, 6)
-}
-
-async function fetchAuthorBooks(book) {
-  const author = book.authors?.[0]
-  if (!author) return []
-  const { books } = await searchBooks(`inauthor:"${author}"`, { maxResults: 20 })
-  return books.filter(b => b.id !== book.id).slice(0, 6)
-}
 
 // ── Series chain layout (SVG) ─────────────────────────────────────────────────
 
@@ -96,8 +28,8 @@ function SeriesNode({ book, x, isCurrent, onClick, hovered, onHover }) {
   return (
     <g
       transform={`translate(${x}, ${CHAIN_Y})`}
-      style={{ cursor: isCurrent ? 'default' : 'pointer' }}
-      onClick={() => !isCurrent && onClick(book.id, book.title, book.authors?.[0])}
+      style={{ cursor: isCurrent ? 'default' : book.id ? 'pointer' : 'not-allowed' }}
+      onClick={() => !isCurrent && book.id && onClick(book.id, book.title, book.authors?.[0])}
       onMouseEnter={() => !isCurrent && onHover(nodeKey)}
       onMouseLeave={() => onHover(null)}
     >
@@ -147,7 +79,7 @@ function SeriesNode({ book, x, isCurrent, onClick, hovered, onHover }) {
       )}
 
       {/* Book number badge */}
-      {book.seriesNumber != null && (
+      {(book.seriesPosition ?? book.seriesNumber) != null && (
         <g>
           <rect
             x={-shw} y={shh - 22} width={sw} height={22}
@@ -161,7 +93,7 @@ function SeriesNode({ book, x, isCurrent, onClick, hovered, onHover }) {
             fontFamily='"Inter", system-ui'
             style={{ userSelect: 'none' }}
           >
-            {isCurrent ? `★  Book ${book.seriesNumber}` : `Book ${book.seriesNumber}`}
+            {isCurrent ? `★  Book ${book.seriesPosition ?? book.seriesNumber}` : `Book ${book.seriesPosition ?? book.seriesNumber}`}
           </text>
         </g>
       )}
@@ -238,7 +170,7 @@ function SeriesChain({ seriesBooks, currentId, onNodeClick }) {
         const prev = display[i - 1]
         const x1 = (W - totalW) / 2 + (i - 1) * (NODE_W + NODE_GAP) + NODE_W / 2
         const x2 = (W - totalW) / 2 + i * (NODE_W + NODE_GAP) + NODE_W / 2
-        const label = `Book ${prev.seriesNumber} → ${book.seriesNumber}`
+        const label = `Book ${prev.seriesPosition ?? prev.seriesNumber} → ${book.seriesPosition ?? book.seriesNumber}`
         return <SeriesEdge key={i} x1={x1} x2={x2} label={label} />
       })}
 
@@ -268,12 +200,16 @@ const WEB_H = 560
 const WEB_CX = WEB_W / 2
 const WEB_CY = WEB_H / 2
 
+const CITATION_COLOR = '#e09050'
+
 const WEB_SECTORS = {
-  author:   { startDeg: -150, endDeg: -30,  radius: 210 },
-  thematic: { startDeg:  30,  endDeg: 150,  radius: 220 },
+  cites:    { startDeg: -120, endDeg:  -60, radius: 200 },
+  citedBy:  { startDeg:  60,  endDeg:  120, radius: 200 },
+  author:   { startDeg: -180, endDeg:  -90, radius: 220 },
+  thematic: { startDeg:   90, endDeg:  180, radius: 220 },
 }
-const WEB_COLORS = { author: AUTHOR_COLOR, thematic: THEMATIC_COLOR }
-const WEB_LABELS = { author: 'same author', thematic: 'similar themes' }
+const WEB_COLORS = { author: AUTHOR_COLOR, thematic: THEMATIC_COLOR, cites: CITATION_COLOR, citedBy: CITATION_COLOR }
+const WEB_LABELS = { author: 'same author', thematic: 'same genre', cites: 'cited by this', citedBy: 'cites this' }
 
 function buildWebNodes(connections) {
   const placed = []
@@ -392,10 +328,12 @@ function WebCenterNode({ book }) {
   )
 }
 
-function StandaloneWeb({ book, authorBooks, thematicBooks, onNodeClick }) {
+function StandaloneWeb({ book, authorBooks, thematicBooks, citesBooks, citedByBooks, onNodeClick }) {
   const [hovered, setHovered] = useState(null)
 
   const connections = [
+    ...citesBooks.map(b => ({ book: b, type: 'cites' })),
+    ...citedByBooks.map(b => ({ book: b, type: 'citedBy' })),
     ...authorBooks.map(b => ({ book: b, type: 'author' })),
     ...thematicBooks.map(b => ({ book: b, type: 'thematic' })),
   ]
@@ -428,86 +366,29 @@ function StandaloneWeb({ book, authorBooks, thematicBooks, onNodeClick }) {
 export default function Connections() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [book, setBook] = useState(null)
-  const [seriesInfo, setSeriesInfo] = useState(null)   // { seriesName, position } | null
-  const [seriesBooks, setSeriesBooks] = useState([])
-  const [authorBooks, setAuthorBooks] = useState([])
-  const [thematicBooks, setThematicBooks] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [phase, setPhase] = useState('Loading book…')
 
-  useEffect(() => {
-    setLoading(true)
-    setSeriesInfo(null)
-    setSeriesBooks([])
-    setAuthorBooks([])
-    setThematicBooks([])
-
-    getVolume(id).then(async b => {
-      setBook(b)
-      setPhase('Checking for series…')
-
-      const author = b.authors?.[0] || ''
-      const si = await fetchSeriesInfo(b.title, author)
-
-      if (si?.found) {
-        setSeriesInfo(si)
-        setPhase(`Loading ${si.seriesName}…`)
-        const olBooks = await fetchSeriesBooksOL(si.seriesName)
-
-        // Build series book list from OL data, injecting the current book at its position
-        const sBooks = olBooks.map(ob => {
-          if (ob.position === si.position) {
-            // Slot for the current book — use the already-loaded GB data (cover, id, etc.)
-            return { ...b, seriesNumber: ob.position, olCover: ob.cover }
-          }
-          return { ...ob, seriesNumber: ob.position, id: null, authors: [author], cover: ob.cover }
-        })
-
-        // If current book wasn't in OL results (position didn't match), inject it
-        if (!sBooks.some(sb => sb.id === id) && si.position) {
-          const existing = sBooks.findIndex(sb => sb.seriesNumber === si.position)
-          if (existing >= 0) sBooks[existing] = { ...b, seriesNumber: si.position }
-          else { sBooks.push({ ...b, seriesNumber: si.position }); sBooks.sort((a, x) => a.seriesNumber - x.seriesNumber) }
-        }
-
-        setSeriesBooks(sBooks)
-      } else {
-        // Standalone: load thematic + author connections
-        setPhase('Finding connections…')
-        const [auth, thematic] = await Promise.allSettled([fetchAuthorBooks(b), fetchThematicBooks(b)])
-        setAuthorBooks(auth.status === 'fulfilled' ? auth.value : [])
-        setThematicBooks(thematic.status === 'fulfilled' ? thematic.value : [])
-      }
-
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [id])
-
-  const handleClick = useCallback(async (bookId, bookTitle, bookAuthor) => {
-    if (bookId) {
-      navigate(`/book/${bookId}`)
-    } else if (bookTitle) {
-      // OL-sourced book — resolve to a Google Books ID first
-      const gbId = await resolveGoogleBooksId(bookTitle, bookAuthor || '')
-      if (gbId) navigate(`/book/${gbId}`)
-    }
-  }, [navigate])
-
-  if (loading && !book) {
+  let book, seriesBooks, authorBooks, thematicBooks, citesBooks, citedByBooks
+  try {
+    book = getVolume(id)
+    seriesBooks = book.seriesName ? getSeriesBooks(book.seriesName) : []
+    citesBooks = getCitations(book)
+    citedByBooks = getCitedBy(book)
+    const related = getRelatedBooks(book)
+    authorBooks = related.filter(b => b.authors.some(a => book.authors.includes(a))).slice(0, 4)
+    thematicBooks = related.filter(b => !b.authors.some(a => book.authors.includes(a))).slice(0, 4)
+  } catch {
     return (
-      <div className="flex items-center justify-center py-32" style={{ color: c.textSecondary }}>
-        <Loader2 size={28} className="animate-spin" />
+      <div className="max-w-xl mx-auto px-4 py-24 text-center">
+        <p style={{ color: c.textSecondary }}>Couldn't load this book.</p>
       </div>
     )
   }
-  if (!book) return (
-    <div className="max-w-xl mx-auto px-4 py-24 text-center">
-      <p style={{ color: c.textSecondary }}>Couldn't load this book.</p>
-    </div>
-  )
 
-  const isSeries = !loading && seriesInfo?.found
+  const isSeries = seriesBooks.length > 0
+
+  const handleClick = useCallback((bookId) => {
+    if (bookId) navigate(`/book/${bookId}`)
+  }, [navigate])
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
@@ -518,12 +399,12 @@ export default function Connections() {
 
       <div className="mb-5">
         <h1 style={{ fontFamily: '"Lora", serif', fontWeight: 700, fontSize: '1.5rem', color: c.textPrimary }}>
-          {isSeries ? `${seriesInfo.seriesName} — Series` : 'Book Connections'}
+          {isSeries ? `${book.seriesName} — Series` : 'Book Connections'}
         </h1>
         <p style={{ fontSize: '0.82rem', color: c.textSecondary, marginTop: 4 }}>
           {book.title}
-          {isSeries && seriesInfo.position && (
-            <span style={{ color: c.accentText }}> · Book {seriesInfo.position}</span>
+          {isSeries && book.seriesPosition && (
+            <span style={{ color: c.accentText }}> · Book {book.seriesPosition}</span>
           )}
           {' · '}click any book to open it
         </p>
@@ -531,14 +412,6 @@ export default function Connections() {
 
       <div className="rounded-2xl overflow-hidden relative"
         style={{ backgroundColor: c.surface, border: `1px solid ${c.border}` }}>
-
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center gap-2 z-10"
-            style={{ color: c.textSecondary, background: 'rgba(22,28,45,0.75)' }}>
-            <Loader2 size={18} className="animate-spin" />
-            <span className="text-sm">{phase}</span>
-          </div>
-        )}
 
         {isSeries ? (
           <SeriesChain
@@ -551,6 +424,8 @@ export default function Connections() {
             book={book}
             authorBooks={authorBooks}
             thematicBooks={thematicBooks}
+            citesBooks={citesBooks}
+            citedByBooks={citedByBooks}
             onNodeClick={handleClick}
           />
         )}
@@ -577,7 +452,11 @@ export default function Connections() {
             </>
           ) : (
             <>
-              {[{ color: AUTHOR_COLOR, label: 'Same author' }, { color: THEMATIC_COLOR, label: 'Similar themes' }].map(({ color, label }) => (
+              {[
+                { color: AUTHOR_COLOR, label: 'Same author' },
+                { color: THEMATIC_COLOR, label: 'Same genre' },
+                { color: CITATION_COLOR, label: 'Citations' },
+              ].map(({ color, label }) => (
                 <div key={label} className="flex items-center gap-1.5">
                   <svg width={24} height={10}>
                     <line x1={0} y1={5} x2={16} y2={5} stroke={color} strokeWidth={1.5} strokeDasharray="4 2" />
