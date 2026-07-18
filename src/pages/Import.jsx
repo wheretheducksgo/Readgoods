@@ -69,10 +69,15 @@ export default function Import() {
         <p style={{ color: c.textSecondary, fontSize: '0.85rem', marginBottom: 16 }}>
           Download all your shelved books as a CSV file.
         </p>
+        {error === 'empty-export' && (
+          <p style={{ color: c.error || '#e05', fontSize: '0.82rem', marginBottom: 10 }}>
+            Your library is empty — add some books to a shelf first.
+          </p>
+        )}
         <button
           onClick={async () => {
             const ok = await exportCSV()
-            if (!ok) alert('Your library is empty — nothing to export.')
+            if (!ok) setError('empty-export')
           }}
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium"
           style={{ backgroundColor: c.btnPrimary, color: c.btnPrimaryText, border: 'none', cursor: 'pointer' }}

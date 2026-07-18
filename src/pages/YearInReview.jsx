@@ -103,7 +103,14 @@ export default function YearInReview() {
   const nextYear = year + 1
   const thisYear = new Date().getFullYear()
 
-  if (!data) return null
+  if (!data) return (
+    <div className="max-w-3xl mx-auto px-6 py-10">
+      <div className="flex items-center gap-3 py-24 justify-center" style={{ color: 'var(--color-text-muted, #666)' }}>
+        <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+        <span style={{ fontSize: '0.9rem' }}>Loading your year in review…</span>
+      </div>
+    </div>
+  )
 
   const hasData = data.readBooks.length > 0
 

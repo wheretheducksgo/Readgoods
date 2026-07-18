@@ -141,7 +141,7 @@ export default function Community() {
           Readgoods Community
         </h1>
         <p style={{ color: c.textSecondary, fontSize: '0.95rem' }}>
-          Books rated and tagged by Readgoods readers.
+          Curated tags and community ratings across the Readgoods catalogue.
         </p>
       </div>
 

@@ -250,8 +250,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* AI "What to read next" */}
-      {hasLibrary && (
+      {/* AI "What to read next" — only show when loading or when we have a result */}
+      {hasLibrary && (loadingAiRec || aiRec) && (
         <div
           className="rounded-xl px-6 py-5 mb-10 flex gap-4 items-start"
           style={{ backgroundColor: c.surface, border: `1px solid ${c.border}`, borderLeft: `3px solid ${c.accent}` }}

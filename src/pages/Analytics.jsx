@@ -154,7 +154,7 @@ function Stopwatch({ onUse }) {
   const canFill = seconds >= 60
 
   function handleFill() {
-    onUse(h, m === 0 && seconds % 60 >= 30 ? 1 : m)
+    onUse(h, m === 0 && h === 0 && seconds % 60 >= 30 ? 1 : m)
     setFilled(true)
   }
 
@@ -341,7 +341,7 @@ export default function Analytics() {
                 onChange={e => setForm(f => ({ ...f, bookId: e.target.value }))}
                 style={inputStyle}
               >
-                <option value="">— select a book —</option>
+                <option value="">{allBooks.length === 0 ? '— add books to a shelf first —' : '— select a book —'}</option>
                 {allBooks.map(b => (
                   <option key={b.id} value={b.id}>{b.title}</option>
                 ))}
