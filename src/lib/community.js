@@ -9,6 +9,7 @@ const LOCAL_BOOK_CACHE = BOOKS.map(b => ({
   title: b.title,
   author: b.authors?.[0] || '',
   cover: b.cover || null,
+  coverHue: b.coverHue ?? null,
 }))
 
 export async function getCommunityBooks({ query = '', tags = [], minRating = 0 } = {}) {

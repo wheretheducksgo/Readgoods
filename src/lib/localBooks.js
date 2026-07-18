@@ -16,7 +16,8 @@ export function searchBooks(query, { startIndex = 0, maxResults = 20 } = {}) {
     b.title.toLowerCase().includes(q) ||
     b.authors.some(a => a.toLowerCase().includes(q)) ||
     b.categories.some(c => c.toLowerCase().includes(q)) ||
-    b.description.toLowerCase().includes(q)
+    b.description.toLowerCase().includes(q) ||
+    (b.isbn && b.isbn.replace(/-/g, '').includes(q.replace(/-/g, '')))
   )
   return {
     total: results.length,

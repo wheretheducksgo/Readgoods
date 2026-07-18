@@ -119,7 +119,6 @@ function JoinGate({ clubId, onJoin }) {
 function CreateClub() {
   const navigate = useNavigate()
   const [bookTitle, setBookTitle] = useState('')
-  const [bookCover, setBookCover] = useState('')
   const [creatorName, setCreatorName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -128,13 +127,6 @@ function CreateClub() {
   async function handleSubmit(e) {
     e.preventDefault()
     if (!bookTitle.trim() || !creatorName.trim()) return
-    const coverUrl = bookCover.trim() || null
-    if (coverUrl) {
-      try {
-        const u = new URL(coverUrl)
-        if (u.protocol !== 'https:') { setError('Cover URL must start with https://'); return }
-      } catch { setError('Cover URL is not valid.'); return }
-    }
     setLoading(true)
     setError('')
     try {
@@ -144,13 +136,12 @@ function CreateClub() {
         body: JSON.stringify({
           bookId: Date.now().toString(),
           bookTitle: bookTitle.trim(),
-          bookCover: coverUrl,
           creatorName: creatorName.trim(),
         }),
       })
       const data = await res.json()
       if (data.clubId) {
-        saveMyClub({ id: data.clubId, bookTitle: bookTitle.trim(), bookCover: coverUrl, createdAt: Date.now() })
+        saveMyClub({ id: data.clubId, bookTitle: bookTitle.trim(), createdAt: Date.now() })
         navigate(`/club/${data.clubId}?name=${encodeURIComponent(creatorName.trim())}`)
       } else {
         setError('Could not create club.')
@@ -233,8 +224,6 @@ function CreateClub() {
             <input type="text" value={bookTitle} onChange={e => setBookTitle(e.target.value)} placeholder="e.g. The Name of the Wind" required style={inputStyle} />
           </div>
           <div>
-            <label style={{ fontSize: '0.78rem', color: c.textSecondary, display: 'block', marginBottom: 6 }}>Cover image URL (optional)</label>
-            <input type="url" value={bookCover} onChange={e => setBookCover(e.target.value)} placeholder="https://…" style={inputStyle} />
           </div>
           <div>
             <label style={{ fontSize: '0.78rem', color: c.textSecondary, display: 'block', marginBottom: 6 }}>Your name *</label>

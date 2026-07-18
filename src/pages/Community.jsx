@@ -32,8 +32,12 @@ function BookCard({ book }) {
         {book.cover ? (
           <img src={book.cover} alt={book.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
         ) : (
-          <div className="w-full h-full flex items-end p-3" style={{ background: `linear-gradient(135deg, ${c.surface2}, ${c.surface})` }}>
-            <span style={{ fontFamily: '"Lora", serif', fontSize: '0.75rem', color: c.accentText }}>{book.title}</span>
+          <div className="w-full h-full flex items-end p-3" style={{
+            background: book.coverHue != null
+              ? `linear-gradient(150deg, hsl(${book.coverHue},35%,22%) 0%, hsl(${book.coverHue},50%,14%) 100%)`
+              : `linear-gradient(135deg, ${c.surface2}, ${c.surface})`,
+          }}>
+            <span style={{ fontFamily: '"Lora", serif', fontSize: '0.75rem', color: `hsl(${book.coverHue ?? 220},60%,75%)` }}>{book.title}</span>
           </div>
         )}
       </div>

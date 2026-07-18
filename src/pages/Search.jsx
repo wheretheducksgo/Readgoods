@@ -131,7 +131,7 @@ export default function Search() {
   }
 
   const runSearch = useCallback(() => {
-    if (!query.trim() && !selectedGenre) return
+    if (!query.trim() && !selectedGenre && !hasActiveFilters) return
     const results = runLocalSearch(query, selectedGenre?.q || null, minRating, sortBy)
     setAllBooks(results)
     setCurrentPage(0)

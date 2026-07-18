@@ -7,7 +7,7 @@ import {
 import BookCard from '../components/BookCard'
 import ShelfButton from '../components/ShelfButton'
 import { getVolume, getRelatedBooks } from '../lib/localBooks'
-import { getBookReviews, getAISummary } from '../lib/aiReview'
+import { getBookReviews } from '../lib/aiReview'
 import { getBookShelf } from '../lib/shelves'
 import { finishReading } from '../lib/readingLog'
 import { getBookRating, setBookRating, getBookReview, setBookReview } from '../lib/ratings'
@@ -48,8 +48,6 @@ function RatingBar({ star, count, total }) {
 function CustomerReviewPanel({ book }) {
   const [state, setState] = useState('loading')
   const [data, setData] = useState(null)
-  const [aiSummary, setAiSummary] = useState(null)
-  const [aiLoading, setAiLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -57,18 +55,6 @@ function CustomerReviewPanel({ book }) {
       if (cancelled) return
       setData(result)
       setState('done')
-      if (result?.found && result.avgRating) {
-        setAiLoading(true)
-        getAISummary({
-          title: book.title,
-          author: book.authors?.[0],
-          avgRating: result.avgRating,
-          ratingCount: result.ratingCount,
-          breakdown: result.ratingBreakdown,
-        }).then(summary => {
-          if (!cancelled) { setAiSummary(summary); setAiLoading(false) }
-        })
-      }
     })
     return () => { cancelled = true }
   }, [book.id])
@@ -159,21 +145,6 @@ function CustomerReviewPanel({ book }) {
             </div>
 
             {/* AI reader sentiment summary */}
-            {(aiLoading || aiSummary) && (
-              <div style={{ borderTop: `1px solid ${c.borderSoft}`, paddingTop: 14 }}>
-                <p style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: c.textMuted, marginBottom: 8 }}>
-                  Reader Sentiment
-                </p>
-                {aiLoading && !aiSummary ? (
-                  <div className="flex items-center gap-2" style={{ color: c.textSecondary }}>
-                    <Loader2 size={13} className="animate-spin" />
-                    <span style={{ fontSize: '0.8rem' }}>Summarizing reader opinions…</span>
-                  </div>
-                ) : (
-                  <p style={{ fontSize: '0.82rem', lineHeight: 1.65, color: c.textSecondary }}>{aiSummary}</p>
-                )}
-              </div>
-            )}
           </div>
         )}
       </div>

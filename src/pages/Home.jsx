@@ -334,7 +334,7 @@ export default function Home() {
               Start adding books to get recommendations
             </p>
             <p style={{ color: c.textMuted, fontSize: '0.8rem' }}>
-              We'll suggest titles based on your genres and favourite authors.
+              We'll suggest titles based on your genres and favorite authors.
             </p>
           </div>
         ) : (
