@@ -165,7 +165,7 @@ export default function Search() {
           Discover books
         </h1>
         <p style={{ color: c.textSecondary, fontSize: '0.875rem' }}>
-          Filter by genre, rating, or availability — then hit Search.
+          Filter by genre or rating, then hit Search.
         </p>
       </div>
 

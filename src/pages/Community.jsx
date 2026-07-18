@@ -90,6 +90,7 @@ export default function Community() {
   const [allTags, setAllTags] = useState([])
   const [books, setBooks] = useState([])
   const [loading, setLoading] = useState(true)
+  const [visibleCount, setVisibleCount] = useState(50)
 
   // Debounce search query
   useEffect(() => {
@@ -107,7 +108,7 @@ export default function Community() {
     let cancelled = false
     setLoading(true)
     getCommunityBooks({ query: debouncedQuery, tags: activeTags, minRating })
-      .then(results => { if (!cancelled) { setBooks(results); setLoading(false) } })
+      .then(results => { if (!cancelled) { setBooks(results); setVisibleCount(50); setLoading(false) } })
       .catch(() => { if (!cancelled) { setBooks([]); setLoading(false) } })
     return () => { cancelled = true }
   }, [authLoading, user?.id ?? null, debouncedQuery, activeTags, minRating])
@@ -291,10 +292,21 @@ export default function Community() {
             {books.length} book{books.length !== 1 ? 's' : ''}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {books.map(book => (
+            {books.slice(0, visibleCount).map(book => (
               <BookCard key={book.book_id} book={book} />
             ))}
           </div>
+          {visibleCount < books.length && (
+            <div className="text-center mt-8">
+              <button
+                onClick={() => setVisibleCount(v => v + 50)}
+                className="px-6 py-2.5 rounded-full text-sm font-medium"
+                style={{ backgroundColor: c.surface, border: `1.5px solid ${c.border}`, color: c.accentText, cursor: 'pointer' }}
+              >
+                Show more ({books.length - visibleCount} remaining)
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>

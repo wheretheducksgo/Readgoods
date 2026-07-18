@@ -89,7 +89,7 @@ function CustomerReviewPanel({ book }) {
           </span>
         </div>
         {state === 'done' && data?.found && (
-          <span style={{ fontSize: '0.72rem', color: c.textMuted }}>Open Library</span>
+          <span style={{ fontSize: '0.72rem', color: c.textMuted }}>Community</span>
         )}
       </div>
 
@@ -530,7 +530,10 @@ export default function Book() {
                     className="rounded overflow-hidden flex-shrink-0"
                     style={{ width: 44, height: 66, backgroundColor: c.surface2 }}
                   >
-                    {b.cover && <img src={b.cover} alt={b.title} className="w-full h-full object-cover" />}
+                    {b.cover
+                    ? <img src={b.cover} alt={b.title} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-end p-1" style={{ background: b.coverHue != null ? `linear-gradient(150deg, hsl(${b.coverHue},35%,22%) 0%, hsl(${b.coverHue},50%,14%) 100%)` : `linear-gradient(135deg, ${c.surface2}, ${c.surface})` }}><span style={{ fontSize: '0.45rem', color: `hsl(${b.coverHue ?? 220},60%,75%)`, fontFamily: '"Lora", serif', lineHeight: 1.2 }}>{b.title}</span></div>
+                  }
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-medium leading-snug" style={{ color: c.textPrimary, fontFamily: '"Lora", serif' }}>
