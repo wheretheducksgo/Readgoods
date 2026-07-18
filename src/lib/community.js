@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { SEED_TAGS } from '../data/seedTags'
+import { SEED_REVIEWS } from '../data/seedReviews'
 import { BOOKS, BOOK_BY_ID } from '../data/books'
 
 // Build a lookup of local books for community display
@@ -53,11 +54,15 @@ export async function getCommunityBooks({ query = '', tags = [], minRating = 0 }
     const seedMoods = SEED_TAGS[book.book_id] || []
     const userMoods = moodsByBook[book.book_id] || new Set()
     const bookMoods = [...new Set([...seedMoods, ...userMoods])]
-    const ratingCount = bookRatings.length
+    // Merge seed reviews with real user reviews
+    const seedRevs = (SEED_REVIEWS[book.book_id] || []).map(r => ({ rating: r.rating, review: r.text }))
+    const userRevs = bookRatings.filter(r => r.review)
+    const allRatings = [...seedRevs, ...userRevs]
+    const ratingCount = allRatings.length
     const avgRating = ratingCount > 0
-      ? bookRatings.reduce((s, r) => s + r.rating, 0) / ratingCount
+      ? allRatings.reduce((s, r) => s + r.rating, 0) / ratingCount
       : null
-    const reviews = bookRatings.filter(r => r.review).map(r => r.review)
+    const reviews = allRatings.map(r => r.review).filter(Boolean)
     return { ...book, ratingCount, avgRating, reviews, moods: bookMoods }
   }).filter(b => b.ratingCount > 0 || b.moods.length > 0)
 
